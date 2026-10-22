@@ -1,26 +1,39 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --color-pearlNavy: #0f172a;
+  --color-pearlBlue: #1e3a8a;
+  --color-pearlAccent: #2563eb;
+  --color-pearlCyan: #06b6d4;
+  --color-cardBlue: #3b82f6;
+  --color-cardGreen: #10b981;
+  --color-cardOrange: #f59e0b;
+  --color-cardRed: #ef4444;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+/* Scratch Card styling */
+.scratch-card {
+  background: linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  user-select: none;
+}
+
+.scratch-card.revealed {
+  background: linear-gradient(135deg, #06b6d4 0%, #10b981 100%);
 }
