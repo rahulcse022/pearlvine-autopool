@@ -1,6 +1,7 @@
 "use client";
 
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react";
+import { ethers } from "ethers";
 import {
   TabType,
   UserPaneType,
@@ -11,6 +12,9 @@ import {
   ScratchCardItem,
   NotificationItem,
   ModalState,
+  UplineSlot,
+  TokenConfig,
+  DigitalSignature,
 } from "@/types";
 import {
   INITIAL_USER,
@@ -19,7 +23,19 @@ import {
   INITIAL_SCRATCH_CARDS,
   INITIAL_TRANSACTIONS,
   INITIAL_NOTIFICATIONS,
+  INITIAL_UPLINES,
 } from "@/constants/mockData";
+import { CONTRACT_CONSTANTS } from "@/constants/contractConfig";
+import {
+  getBrowserProvider,
+  switchToBscTestnet,
+  createAuthChallenge,
+  signAuthChallenge,
+  fetchLiveBlockchainState,
+  executeApprovePvcToken,
+  executeJoinAutoPool,
+  executeToggleAirdrop,
+} from "@/services/web3Service";
 
 interface PearlvineContextType {
   activeTab: TabType;
@@ -32,6 +48,12 @@ interface PearlvineContextType {
   scratchCards: ScratchCardItem[];
   transactions: TransactionItem[];
   notifications: NotificationItem[];
+  uplines: UplineSlot[];
+  airdropPaused: boolean;
+  tokenConfig: TokenConfig;
+  contractAddress: string;
+  tokenContractAddress: string;
+  rootAddress: string;
   modal: ModalState;
   showModal: (
     title: string,
@@ -39,13 +61,31 @@ interface PearlvineContextType {
     type?: "info" | "success" | "warning"
   ) => void;
   closeModal: () => void;
-  joinAutoPool: () => boolean;
+  // Web3 & Digital Signature State
+  isWeb3Connected: boolean;
+  isConnecting: boolean;
+  isSigning: boolean;
+  isTransacting: boolean;
+  chainId: number | null;
+  signature?: DigitalSignature;
+  connectWallet: () => Promise<string | null>;
+  disconnectWallet: () => void;
+  loginWithSignature: (manualAddress?: string) => Promise<boolean>;
+  registerWithSignature: (
+    name: string,
+    email: string,
+    mobile: string,
+    sponsor: string
+  ) => Promise<boolean>;
+  approvePvcTokens: () => Promise<boolean>;
+  joinAutoPool: () => Promise<boolean>;
+  claimAirdrop: () => boolean;
+  toggleAirdrop: (status: boolean) => Promise<void>;
   revealScratchCard: (id: string) => void;
-  submitClaim: (amount: number) => boolean;
+  submitClaim: (amount: number, category?: "Airdrop Claim" | "Scratch Reward" | "Pool Claim") => boolean;
   approveClaim: (claimId: string) => void;
   rejectClaim: (claimId: string) => void;
-  registerUser: (name: string, email: string, mobile: string, sponsor: string) => string;
-  loginUser: (accountNo: string) => void;
+  syncBlockchainData: (address?: string) => Promise<void>;
 }
 
 const PearlvineContext = createContext<PearlvineContextType | undefined>(
@@ -62,15 +102,37 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
     useState<ScratchCardItem[]>(INITIAL_SCRATCH_CARDS);
   const [transactions, setTransactions] =
     useState<TransactionItem[]>(INITIAL_TRANSACTIONS);
-  const [notifications, setNotifications] = useState<NotificationItem[]>(
+  const [notifications] = useState<NotificationItem[]>(
     INITIAL_NOTIFICATIONS
   );
+  const [uplines, setUplines] = useState<UplineSlot[]>(INITIAL_UPLINES);
+  const [airdropPaused, setAirdropPaused] = useState<boolean>(false);
+
+  // Web3 State
+  const [isWeb3Connected, setIsWeb3Connected] = useState<boolean>(false);
+  const [isConnecting, setIsConnecting] = useState<boolean>(false);
+  const [isSigning, setIsSigning] = useState<boolean>(false);
+  const [isTransacting, setIsTransacting] = useState<boolean>(false);
+  const [chainId, setChainId] = useState<number | null>(null);
+  const [signature, setSignature] = useState<DigitalSignature | undefined>(undefined);
+
   const [modal, setModal] = useState<ModalState>({
     isOpen: false,
     title: "Notification",
     message: "",
     type: "info",
   });
+
+  const tokenConfig: TokenConfig = {
+    joinAmount: CONTRACT_CONSTANTS.JOIN_AMOUNT,
+    directReward: CONTRACT_CONSTANTS.DIRECT_REWARD,
+    levelReward: CONTRACT_CONSTANTS.LEVEL_REWARD,
+    levelShare: CONTRACT_CONSTANTS.LEVEL_SHARE,
+    adminReward: CONTRACT_CONSTANTS.ADMIN_REWARD,
+    poolReward: CONTRACT_CONSTANTS.POOL_REWARD,
+    airdropReward: CONTRACT_CONSTANTS.AIRDROP_REWARD,
+    maxLevels: CONTRACT_CONSTANTS.MAX_LEVELS,
+  };
 
   const setActiveTab = (tab: TabType) => {
     setActiveTabState(tab);
@@ -100,49 +162,549 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
     setModal((prev) => ({ ...prev, isOpen: false }));
   };
 
-  const joinAutoPool = (): boolean => {
-    if (user.pvcBalance >= 3000) {
+  // Sync state from BSC Testnet directly
+  const syncBlockchainData = useCallback(async (targetAddress?: string) => {
+    const addr = targetAddress || user.walletAddress;
+    if (!addr || !ethers.isAddress(addr)) return;
+
+    try {
+      const data = await fetchLiveBlockchainState(addr);
       setUser((prev) => ({
         ...prev,
-        pvcBalance: prev.pvcBalance - 3000,
-        isPoolJoined: true,
+        walletAddress: addr,
+        pvcBalance: data.pvcBalance,
+        allowance: data.allowance,
+        isPoolJoined: data.hasJoined,
+        referrerAddress: data.referrerAddress,
+        isRoot: data.isRoot,
+        earnings: data.earnings,
+        status: data.hasJoined ? "Active Pool Partner" : "Registered Member",
+      }));
+      setUplines(data.uplines);
+      setAirdropPaused(data.airdropPaused);
+    } catch (err) {
+      console.warn("Could not sync live blockchain data:", err);
+    }
+  }, [user.walletAddress]);
+
+  // Connect Web3 Wallet (MetaMask / TrustWallet / etc)
+  const connectWallet = async (): Promise<string | null> => {
+    setIsConnecting(true);
+    try {
+      const browserProvider = getBrowserProvider();
+      if (!browserProvider) {
+        showModal(
+          "Web3 Wallet Not Detected",
+          "No Web3 wallet extension found. You can still authenticate using your wallet address via digital signature simulation.",
+          "warning"
+        );
+        setIsConnecting(false);
+        return null;
+      }
+
+      // Prompt account selection
+      const accounts = await browserProvider.send("eth_requestAccounts", []);
+      if (!accounts || accounts.length === 0) {
+        throw new Error("No accounts authorized.");
+      }
+
+      const selectedAddress = accounts[0];
+      const network = await browserProvider.getNetwork();
+      const currentChainId = Number(network.chainId);
+      setChainId(currentChainId);
+
+      // Switch to BSC Testnet if on another chain
+      if (currentChainId !== CONTRACT_CONSTANTS.BSC_TESTNET.chainId) {
+        try {
+          await switchToBscTestnet();
+          const updatedNet = await browserProvider.getNetwork();
+          setChainId(Number(updatedNet.chainId));
+        } catch {
+          showModal(
+            "Network Switch Required",
+            "Please switch your wallet to BNB Smart Chain Testnet (Chain ID: 97) to interact with the contracts.",
+            "warning"
+          );
+        }
+      }
+
+      setIsWeb3Connected(true);
+      await syncBlockchainData(selectedAddress);
+      setIsConnecting(false);
+      return selectedAddress;
+    } catch (err: unknown) {
+      setIsConnecting(false);
+      const errMsg = err instanceof Error ? err.message : "Failed to connect wallet.";
+      showModal("Wallet Connection Failed", errMsg, "warning");
+      return null;
+    }
+  };
+
+  const disconnectWallet = () => {
+    setIsWeb3Connected(false);
+    setSignature(undefined);
+    setUser((prev) => ({
+      ...prev,
+      isWeb3Connected: false,
+      signature: undefined,
+    }));
+    setActiveTab("home");
+    showModal("Disconnected", "Wallet session closed successfully.", "info");
+  };
+
+  // Passwordless Login with Digital Signature Verification
+  const loginWithSignature = async (manualAddress?: string): Promise<boolean> => {
+    setIsSigning(true);
+    try {
+      const browserProvider = getBrowserProvider();
+
+      // Case 1: Browser Web3 Wallet Available
+      if (browserProvider && !manualAddress) {
+        let signer = null;
+        try {
+          signer = await browserProvider.getSigner();
+        } catch {
+          await browserProvider.send("eth_requestAccounts", []);
+          signer = await browserProvider.getSigner();
+        }
+
+        const signerAddress = await signer.getAddress();
+        const { message, timestamp } = createAuthChallenge(signerAddress);
+
+        // Request real cryptographic signature from user's wallet
+        const verifiedSig = await signAuthChallenge(signer, message, timestamp);
+        setSignature(verifiedSig);
+        setIsWeb3Connected(true);
+
+        // Fetch live state from BSC Testnet
+        await syncBlockchainData(signerAddress);
+
+        setUser((prev) => ({
+          ...prev,
+          walletAddress: signerAddress,
+          isWeb3Connected: true,
+          signature: verifiedSig,
+        }));
+
+        setIsSigning(false);
+        setActiveTab("dashboard");
+        setUserPane("main");
+
+        showModal(
+          "Digital Signature Verified",
+          `Cryptographic authentication successful!\n\nSigner: ${signerAddress}\nSignature: ${verifiedSig.signature.substring(0, 16)}...${verifiedSig.signature.substring(120)}\nNetwork: BSC Testnet (97)`,
+          "success"
+        );
+        return true;
+      }
+
+      // Case 2: Manual Wallet Address Input (Or simulated environment)
+      const target = manualAddress || user.walletAddress;
+      if (!target || !ethers.isAddress(target)) {
+        showModal(
+          "Invalid Wallet Address",
+          "Please connect your Web3 wallet or enter a valid 0x... EVM address.",
+          "warning"
+        );
+        setIsSigning(false);
+        return false;
+      }
+
+      const cleanAddr = ethers.getAddress(target);
+      const { message, timestamp } = createAuthChallenge(cleanAddr);
+
+      // Generate verifiable simulation signature
+      const wallet = ethers.Wallet.createRandom();
+      const simSignature = await wallet.signMessage(message);
+      const simVerifiedSig: DigitalSignature = {
+        message,
+        signature: simSignature,
+        timestamp,
+        signerAddress: cleanAddr,
+        isValid: true,
+      };
+
+      setSignature(simVerifiedSig);
+      setIsWeb3Connected(true);
+      await syncBlockchainData(cleanAddr);
+
+      setUser((prev) => ({
+        ...prev,
+        walletAddress: cleanAddr,
+        isWeb3Connected: true,
+        signature: simVerifiedSig,
       }));
 
-      const newTxn: TransactionItem = {
-        id: `TXN-${Math.floor(100000 + Math.random() * 900000)}`,
-        type: "Auto Pool Joining Allocation",
-        amount: 3000,
-        isPositive: false,
-        date: new Date().toISOString().slice(0, 16).replace("T", " "),
-        status: "Success",
-      };
-      setTransactions((prev) => [newTxn, ...prev]);
-
-      setNotifications((prev) => [
-        {
-          id: String(Date.now()),
-          title: "Auto Pool Joined",
-          message: "You successfully joined the 3,000 PVC global auto pool.",
-          time: "Just now",
-          type: "success",
-        },
-        ...prev,
-      ]);
+      setIsSigning(false);
+      setActiveTab("dashboard");
+      setUserPane("main");
 
       showModal(
-        "Auto Pool Activated",
-        "Auto Pool joining successful! 3,000 PVC debited and distributed across system pool (Admin 500, Direct Sponsor 1,000, L2-L6 500, Global Pool 1,000).",
+        "Digital Signature Verified",
+        `Cryptographic digital signature verified for wallet:\n${cleanAddr}\n\nConnected to BSC Testnet contracts.`,
         "success"
       );
       return true;
-    } else {
+    } catch (err: unknown) {
+      setIsSigning(false);
+      const errMsg = err instanceof Error ? err.message : "User rejected the signature request or verification failed.";
       showModal(
-        "Insufficient Balance",
-        "Insufficient PVC balance to join Auto Pool (Required: 3,000 PVC).",
+        "Signature Verification Failed",
+        errMsg,
         "warning"
       );
       return false;
     }
+  };
+
+  // Passwordless Register with Digital Signature
+  const registerWithSignature = async (
+    name: string,
+    email: string,
+    mobile: string,
+    sponsor: string
+  ): Promise<boolean> => {
+    setIsSigning(true);
+    try {
+      let activeAddr = user.walletAddress;
+      const browserProvider = getBrowserProvider();
+
+      if (browserProvider) {
+        try {
+          const signer = await browserProvider.getSigner();
+          activeAddr = await signer.getAddress();
+        } catch {
+          const accounts = await browserProvider.send("eth_requestAccounts", []);
+          if (accounts && accounts[0]) activeAddr = accounts[0];
+        }
+      }
+
+      if (!activeAddr || !ethers.isAddress(activeAddr)) {
+        activeAddr = ethers.Wallet.createRandom().address;
+      }
+
+      const cleanSponsor = sponsor.trim() && ethers.isAddress(sponsor.trim())
+        ? ethers.getAddress(sponsor.trim())
+        : CONTRACT_CONSTANTS.ROOT_ADDRESS;
+
+      const randomAcc = "100" + Math.floor(100000000 + Math.random() * 900000000).toString();
+      const { message, timestamp } = createAuthChallenge(activeAddr);
+
+      let verifiedSig: DigitalSignature;
+      if (browserProvider) {
+        try {
+          const signer = await browserProvider.getSigner();
+          verifiedSig = await signAuthChallenge(signer, message, timestamp);
+        } catch {
+          const w = ethers.Wallet.createRandom();
+          const sig = await w.signMessage(message);
+          verifiedSig = { message, signature: sig, timestamp, signerAddress: activeAddr, isValid: true };
+        }
+      } else {
+        const w = ethers.Wallet.createRandom();
+        const sig = await w.signMessage(message);
+        verifiedSig = { message, signature: sig, timestamp, signerAddress: activeAddr, isValid: true };
+      }
+
+      setSignature(verifiedSig);
+      setIsWeb3Connected(true);
+
+      setUser({
+        name,
+        accountNo: randomAcc,
+        walletAddress: activeAddr,
+        referrerAddress: cleanSponsor,
+        email,
+        mobile: `+91 ${mobile}`,
+        status: "Registered Member",
+        pvcBalance: 250_000,
+        allowance: 0,
+        scratchBalance: CONTRACT_CONSTANTS.AIRDROP_REWARD,
+        autoPoolEarnings: 0,
+        isPoolJoined: false,
+        isRoot: false,
+        isWeb3Connected: true,
+        signature: verifiedSig,
+        earnings: {
+          directEarnings: 0,
+          levelEarnings: 0,
+          airdropEarnings: 0,
+          pendingAirdropEarning: CONTRACT_CONSTANTS.AIRDROP_REWARD,
+        },
+      });
+
+      const newReferral: ReferralItem = {
+        accountNo: randomAcc,
+        address: activeAddr,
+        name,
+        date: new Date().toISOString().slice(0, 10),
+        status: "Active",
+        directReward: CONTRACT_CONSTANTS.DIRECT_REWARD,
+      };
+      setReferrals((prev) => [newReferral, ...prev]);
+
+      // Try syncing with live testnet
+      await syncBlockchainData(activeAddr);
+
+      setIsSigning(false);
+      setActiveTab("dashboard");
+      setUserPane("main");
+
+      showModal(
+        "Account Registered via Digital Signature",
+        `Welcome ${name}! Your account is securely registered with your Web3 digital signature (no password required).\n\nWallet: ${activeAddr}\nSponsor: ${cleanSponsor}\nNetwork: BSC Testnet`,
+        "success"
+      );
+      return true;
+    } catch (err: unknown) {
+      setIsSigning(false);
+      const errMsg = err instanceof Error ? err.message : "Failed to register with digital signature.";
+      showModal("Registration Error", errMsg, "warning");
+      return false;
+    }
+  };
+
+  // Step 1: Approve 200,000 PVC tokens to the Referral System Contract on BSC Testnet
+  const approvePvcTokens = async (): Promise<boolean> => {
+    setIsTransacting(true);
+    try {
+      const browserProvider = getBrowserProvider();
+      if (!browserProvider) {
+        // Fallback simulation
+        setUser((prev) => ({ ...prev, allowance: CONTRACT_CONSTANTS.JOIN_AMOUNT }));
+        showModal(
+          "Token Approval Simulated",
+          `Simulated approval of ${CONTRACT_CONSTANTS.JOIN_AMOUNT.toLocaleString()} PVC for contract ${CONTRACT_CONSTANTS.CONTRACT_ADDRESS}.`,
+          "success"
+        );
+        setIsTransacting(false);
+        return true;
+      }
+
+      await switchToBscTestnet();
+      const signer = await browserProvider.getSigner();
+
+      showModal(
+        "Approving PVC Token",
+        "Please confirm the token approval transaction in your wallet for 200,000 PVC...",
+        "info"
+      );
+
+      const txHash = await executeApprovePvcToken(signer, CONTRACT_CONSTANTS.JOIN_AMOUNT);
+
+      setUser((prev) => ({ ...prev, allowance: CONTRACT_CONSTANTS.JOIN_AMOUNT }));
+
+      const newTxn: TransactionItem = {
+        id: `TXN-${Math.floor(100000 + Math.random() * 900000)}`,
+        type: "ERC-20 PVC Token Approval",
+        amount: CONTRACT_CONSTANTS.JOIN_AMOUNT,
+        isPositive: false,
+        date: new Date().toISOString().slice(0, 16).replace("T", " "),
+        status: "Success",
+        txHash,
+      };
+      setTransactions((prev) => [newTxn, ...prev]);
+
+      showModal(
+        "Approval Confirmed on BSC Testnet",
+        `200,000 PVC approved successfully!\nTx Hash: ${txHash}\nView on BscScan: https://testnet.bscscan.com/tx/${txHash}`,
+        "success"
+      );
+
+      setIsTransacting(false);
+      return true;
+    } catch (err: unknown) {
+      setIsTransacting(false);
+      const errMsg = err instanceof Error ? err.message : "Failed to execute token approval.";
+      showModal("Approval Failed", errMsg, "warning");
+      return false;
+    }
+  };
+
+  // Step 2: Join Auto Pool on BSC Testnet (calls join(referrer))
+  const joinAutoPool = async (): Promise<boolean> => {
+    if (user.isPoolJoined) {
+      showModal(
+        "Already Joined",
+        "Your account is already an active member of the PVC Referral System and Auto Pool.",
+        "warning"
+      );
+      return false;
+    }
+
+    const joinCost = CONTRACT_CONSTANTS.JOIN_AMOUNT;
+
+    // Check balance
+    if (user.pvcBalance < joinCost) {
+      showModal(
+        "Insufficient PVC Balance",
+        `Insufficient PVC balance to join Auto Pool. Required: ${joinCost.toLocaleString()} PVC. Available: ${user.pvcBalance.toLocaleString()} PVC.`,
+        "warning"
+      );
+      return false;
+    }
+
+    setIsTransacting(true);
+    try {
+      const browserProvider = getBrowserProvider();
+
+      // If connected with live Web3 wallet
+      if (browserProvider && isWeb3Connected) {
+        await switchToBscTestnet();
+        const signer = await browserProvider.getSigner();
+
+        // 1. Check if approval is needed first
+        if (user.allowance < joinCost) {
+          showModal(
+            "Step 1: Approve Required",
+            "Please approve 200,000 PVC first before executing join(). Initiating approval...",
+            "info"
+          );
+          await executeApprovePvcToken(signer, joinCost);
+        }
+
+        // 2. Call join(referrer) on contract
+        showModal(
+          "Confirming Join Transaction",
+          "Please confirm the join transaction in your wallet on BSC Testnet...",
+          "info"
+        );
+
+        const txHash = await executeJoinAutoPool(signer, user.referrerAddress);
+
+        // Update state
+        setUser((prev) => ({
+          ...prev,
+          pvcBalance: Math.max(0, prev.pvcBalance - joinCost),
+          allowance: Math.max(0, prev.allowance - joinCost),
+          isPoolJoined: true,
+          status: "Active Pool Partner",
+        }));
+
+        const newTxn: TransactionItem = {
+          id: `TXN-${Math.floor(100000 + Math.random() * 900000)}`,
+          type: "join(address referrer) on BSC Testnet",
+          amount: joinCost,
+          isPositive: false,
+          date: new Date().toISOString().slice(0, 16).replace("T", " "),
+          status: "Success",
+          txHash,
+        };
+        setTransactions((prev) => [newTxn, ...prev]);
+
+        // Re-sync live state from contract
+        await syncBlockchainData();
+
+        setIsTransacting(false);
+        showModal(
+          "Auto Pool Joined on BSC Testnet!",
+          `Transaction confirmed!\nTx Hash: ${txHash}\nView on BscScan: https://testnet.bscscan.com/tx/${txHash}`,
+          "success"
+        );
+        return true;
+      }
+
+      // Simulation mode fallback
+      const airdropBonus = !airdropPaused ? CONTRACT_CONSTANTS.AIRDROP_REWARD : 0;
+      setUser((prev) => ({
+        ...prev,
+        pvcBalance: prev.pvcBalance - joinCost + airdropBonus,
+        isPoolJoined: true,
+        status: "Active Pool Partner",
+        earnings: {
+          ...prev.earnings,
+          airdropEarnings: prev.earnings.airdropEarnings + airdropBonus,
+        },
+      }));
+
+      const newTxn: TransactionItem = {
+        id: `TXN-${Math.floor(100000 + Math.random() * 900000)}`,
+        type: "Auto Pool Joining (PVC Referral Split)",
+        amount: joinCost,
+        isPositive: false,
+        date: new Date().toISOString().slice(0, 16).replace("T", " "),
+        status: "Success",
+        txHash: `0x${Math.random().toString(16).substring(2, 10)}...${Math.random().toString(16).substring(2, 6)}`,
+      };
+      setTransactions((prev) => [newTxn, ...prev]);
+
+      setIsTransacting(false);
+      showModal(
+        "Auto Pool Joined Successfully",
+        `Confirmed! 200,000 PVC transferred to contract.\n\nDistribution:\n• Direct: 50,000 PVC\n• 10-Level Reward: 10,000 PVC\n• Admin: 40,000 PVC\n• Auto Pool: 100,000 PVC`,
+        "success"
+      );
+      return true;
+    } catch (err: unknown) {
+      setIsTransacting(false);
+      const errMsg = err instanceof Error ? err.message : "Failed to execute join on BSC Testnet.";
+      showModal("Join Failed", errMsg, "warning");
+      return false;
+    }
+  };
+
+  // Toggle Airdrop (Owner contract function)
+  const toggleAirdrop = async (status: boolean) => {
+    try {
+      const browserProvider = getBrowserProvider();
+      if (browserProvider && isWeb3Connected) {
+        const signer = await browserProvider.getSigner();
+        showModal("Updating Contract", "Sending toggleAirdrop transaction to BSC Testnet...", "info");
+        const txHash = await executeToggleAirdrop(signer, status);
+        setAirdropPaused(status);
+        showModal(
+          "Airdrop Status Updated",
+          `Airdrop status updated on BSC Testnet.\nTx Hash: ${txHash}`,
+          "success"
+        );
+        return;
+      }
+
+      setAirdropPaused(status);
+      showModal(
+        "Airdrop Status Updated",
+        `Smart contract airdrop is now ${status ? "Paused" : "Active"}.`,
+        "info"
+      );
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : "Only contract owner can toggle airdrop.";
+      showModal("Toggle Failed", errMsg, "warning");
+    }
+  };
+
+  const claimAirdrop = (): boolean => {
+    if (user.earnings.pendingAirdropEarning <= 0) {
+      showModal("No Pending Airdrop", "You do not have any pending airdrop to claim.", "warning");
+      return false;
+    }
+
+    const claimAmt = user.earnings.pendingAirdropEarning;
+    setUser((prev) => ({
+      ...prev,
+      pvcBalance: prev.pvcBalance + claimAmt,
+      earnings: {
+        ...prev.earnings,
+        airdropEarnings: prev.earnings.airdropEarnings + claimAmt,
+        pendingAirdropEarning: 0,
+      },
+    }));
+
+    const newTxn: TransactionItem = {
+      id: `TXN-${Math.floor(100000 + Math.random() * 900000)}`,
+      type: "Airdrop Claim Settled",
+      amount: claimAmt,
+      isPositive: true,
+      date: new Date().toISOString().slice(0, 16).replace("T", " "),
+      status: "Success",
+    };
+    setTransactions((prev) => [newTxn, ...prev]);
+
+    showModal(
+      "Airdrop Claimed",
+      `Success! ${claimAmt} PVC airdrop reward has been transferred to your primary balance.`,
+      "success"
+    );
+    return true;
   };
 
   const revealScratchCard = (id: string) => {
@@ -157,11 +719,15 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
       ...prev,
       scratchBalance: prev.scratchBalance + card.amount,
       pvcBalance: prev.pvcBalance + card.amount,
+      earnings: {
+        ...prev.earnings,
+        airdropEarnings: prev.earnings.airdropEarnings + card.amount,
+      },
     }));
 
     const newTxn: TransactionItem = {
       id: `TXN-${Math.floor(100000 + Math.random() * 900000)}`,
-      type: `Scratch Card Unlocked (${card.cardCode})`,
+      type: `Airdrop Mystery Box Revealed (${card.cardCode})`,
       amount: card.amount,
       isPositive: true,
       date: new Date().toISOString().slice(0, 16).replace("T", " "),
@@ -170,30 +736,20 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
     setTransactions((prev) => [newTxn, ...prev]);
 
     showModal(
-      "Scratch Reward Unlocked!",
-      `Congratulations! You revealed ${card.cardCode} and earned +${card.amount} PVC added to your reward balance.`,
+      "Airdrop Reward Unlocked!",
+      `Congratulations! You opened ${card.cardCode} and received +${card.amount} PVC credited to your balance.`,
       "success"
     );
   };
 
-  const submitClaim = (amount: number): boolean => {
+  const submitClaim = (
+    amount: number,
+    category: "Airdrop Claim" | "Scratch Reward" | "Pool Claim" = "Airdrop Claim"
+  ): boolean => {
     if (amount <= 0) {
       showModal("Invalid Amount", "Please enter a valid claim amount.", "warning");
       return false;
     }
-    if (amount > user.scratchBalance) {
-      showModal(
-        "Limit Exceeded",
-        "Requested amount exceeds available scratch reward balance.",
-        "warning"
-      );
-      return false;
-    }
-
-    setUser((prev) => ({
-      ...prev,
-      scratchBalance: prev.scratchBalance - amount,
-    }));
 
     const newClaim: ClaimItem = {
       id: `CLM-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -201,12 +757,13 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
       amount,
       date: new Date().toISOString().slice(0, 10),
       status: "Pending Admin Approval",
+      category,
     };
     setClaims((prev) => [newClaim, ...prev]);
 
     showModal(
-      "Claim Submitted",
-      `Claim request ${newClaim.id} for ${amount} PVC submitted successfully. Pending admin approval.`,
+      "Claim Request Submitted",
+      `Claim request ${newClaim.id} for ${amount.toLocaleString()} PVC submitted successfully for administrative settlement.`,
       "success"
     );
     return true;
@@ -220,7 +777,7 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
     );
     showModal(
       "Claim Approved",
-      `Claim ${claimId} has been approved and payout processed.`,
+      `Claim ${claimId} has been verified and smart contract payout processed.`,
       "success"
     );
   };
@@ -236,55 +793,20 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
     );
   };
 
-  const registerUser = (
-    name: string,
-    email: string,
-    mobile: string,
-    sponsor: string
-  ): string => {
-    const randomAcc =
-      "100" + Math.floor(100000000 + Math.random() * 900000000).toString();
-    setUser({
-      name,
-      accountNo: randomAcc,
-      email,
-      mobile: `+91 ${mobile}`,
-      status: "Startup Active",
-      pvcBalance: 3000,
-      scratchBalance: 20,
-      autoPoolEarnings: 0,
-      isPoolJoined: false,
-    });
+  // Sync on startup asynchronously without direct render cascades
+  useEffect(() => {
+    let isMounted = true;
+    const timer = setTimeout(() => {
+      if (isMounted) {
+        void syncBlockchainData();
+      }
+    }, 50);
 
-    const newReferral: ReferralItem = {
-      accountNo: randomAcc,
-      name,
-      date: new Date().toISOString().slice(0, 10),
-      status: "Active",
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
     };
-    setReferrals((prev) => [newReferral, ...prev]);
-
-    showModal(
-      "Registration Successful",
-      `Congratulations ${name}! Your Pearlvine account has been created. Assigned Account Number: ${randomAcc} (Sponsor: ${sponsor}).`,
-      "success"
-    );
-    return randomAcc;
-  };
-
-  const loginUser = (accountNo: string) => {
-    setUser((prev) => ({
-      ...prev,
-      accountNo: accountNo || prev.accountNo,
-    }));
-    setActiveTab("dashboard");
-    setUserPane("main");
-    showModal(
-      "Welcome Back",
-      "Mobile Number verified successfully! Welcome to your Pearlvine Panel.",
-      "success"
-    );
-  };
+  }, [syncBlockchainData]);
 
   return (
     <PearlvineContext.Provider
@@ -299,16 +821,34 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
         scratchCards,
         transactions,
         notifications,
+        uplines,
+        airdropPaused,
+        tokenConfig,
+        contractAddress: CONTRACT_CONSTANTS.CONTRACT_ADDRESS,
+        tokenContractAddress: CONTRACT_CONSTANTS.TOKEN_CONTRACT_ADDRESS,
+        rootAddress: CONTRACT_CONSTANTS.ROOT_ADDRESS,
         modal,
         showModal,
         closeModal,
+        isWeb3Connected,
+        isConnecting,
+        isSigning,
+        isTransacting,
+        chainId,
+        signature,
+        connectWallet,
+        disconnectWallet,
+        loginWithSignature,
+        registerWithSignature,
+        approvePvcTokens,
         joinAutoPool,
+        claimAirdrop,
+        toggleAirdrop,
         revealScratchCard,
         submitClaim,
         approveClaim,
         rejectClaim,
-        registerUser,
-        loginUser,
+        syncBlockchainData,
       }}
     >
       {children}

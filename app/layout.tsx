@@ -10,9 +10,9 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Pearlvine International - Auto Pool & Digital Revolution",
+  title: "Pearlvine PVC Referral & Auto Pool - Smart Contract Platform",
   description:
-    "Pearlvine International - Automated Global Pool, Crypto Wallet, Scratch Card Rewards & Level Income platform.",
+    "200,000 PVC Global Auto Pool, 50,000 PVC Direct Referral Rewards, 10-Level Reward System, and 500 PVC Airdrop protocol.",
 };
 
 export default function RootLayout({

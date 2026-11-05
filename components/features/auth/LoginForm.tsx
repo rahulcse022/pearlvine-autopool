@@ -4,123 +4,171 @@ import React, { useState } from "react";
 import { usePearlvine } from "@/context/PearlvineContext";
 
 export default function LoginForm() {
-  const { loginUser, showModal } = usePearlvine();
-  const [accountNo, setAccountNo] = useState("100274127066");
-  const [password, setPassword] = useState("secret123");
-  const [showOtpContainer, setShowOtpContainer] = useState(false);
-  const [showOtpInput, setShowOtpInput] = useState(false);
-  const [otpCode, setOtpCode] = useState("400583");
+  const {
+    loginWithSignature,
+    isSigning,
+    isConnecting,
+    setActiveTab,
+    contractAddress,
+    tokenContractAddress,
+    user,
+  } = usePearlvine();
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const [customAddress, setCustomAddress] = useState<string>(user.walletAddress || "");
+  const [useCustomAddress, setUseCustomAddress] = useState<boolean>(false);
+
+  const handleWalletLogin = async () => {
+    await loginWithSignature();
+  };
+
+  const handleCustomAddressLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setShowOtpContainer(true);
-    showModal(
-      "Credentials Verified",
-      "Credentials verified. Please click 'Verify Now' for Mobile OTP verification.",
-      "info"
-    );
-  };
-
-  const handleTriggerOtp = () => {
-    setShowOtpInput(true);
-    showModal(
-      "OTP Sent",
-      "OTP (400583) has been sent to your registered mobile number 9900000099.",
-      "info"
-    );
-  };
-
-  const handleVerifyOtp = () => {
-    if (otpCode === "400583" || otpCode.length === 6) {
-      loginUser(accountNo);
-    } else {
-      showModal("Invalid OTP", "Please enter the valid 6-digit OTP (400583).", "warning");
-    }
+    if (!customAddress.trim()) return;
+    await loginWithSignature(customAddress.trim());
   };
 
   return (
     <section className="py-16 px-4 sm:px-6 lg:px-8 bg-slate-50 min-h-[calc(100vh-14rem)] flex items-center justify-center">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-        <div className="bg-[#0f172a] text-white px-6 py-4 flex justify-between items-center">
-          <h2 className="text-xl font-bold">Sign In to Account</h2>
-          <i className="fa-solid fa-lock text-cyan-400"></i>
+      <div className="max-w-lg w-full bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
+        {/* Header */}
+        <div className="bg-[#0f172a] text-white p-6 sm:p-7 border-b border-slate-800">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="inline-flex items-center gap-1.5 bg-blue-500/20 text-cyan-400 text-[10px] font-bold px-2.5 py-1 rounded-full border border-cyan-500/30 mb-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping"></span>
+                BSC Testnet (Chain ID: 97)
+              </div>
+              <h2 className="text-2xl font-black tracking-tight">Web3 Authentication</h2>
+              <p className="text-xs text-slate-400 mt-1">
+                Passwordless login via Cryptographic Digital Signature Verification
+              </p>
+            </div>
+            <div className="w-12 h-12 bg-blue-600/20 border border-blue-500/30 rounded-2xl flex items-center justify-center text-cyan-400 text-xl">
+              <i className="fa-solid fa-signature"></i>
+            </div>
+          </div>
         </div>
 
         <div className="p-6 sm:p-8 space-y-6">
-          <form onSubmit={handleLoginSubmit} className="space-y-4">
+          {/* Digital Signature Info Banner */}
+          <div className="bg-blue-50/70 border border-blue-100 p-4 rounded-2xl flex items-start space-x-3 text-xs text-blue-900">
+            <i className="fa-solid fa-shield-halved text-blue-600 text-base mt-0.5"></i>
             <div>
-              <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
-                <i className="fa-solid fa-user mr-1 text-slate-400"></i> Pearlvine A/c Number
-              </label>
-              <input
-                type="text"
-                required
-                value={accountNo}
-                onChange={(e) => setAccountNo(e.target.value)}
-                placeholder="Enter Account Number"
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:outline-none text-sm"
-              />
+              <span className="font-bold block">No Passwords Required</span>
+              <span className="text-blue-700 leading-relaxed text-[11px] block mt-0.5">
+                Authentication relies on EIP-191 off-chain digital signatures verified by your private key. Safe, decentralized, and zero gas fees.
+              </span>
             </div>
+          </div>
 
-            <div>
-              <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
-                <i className="fa-solid fa-key mr-1 text-slate-400"></i> Password
-              </label>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter Password"
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:outline-none text-sm"
-              />
-            </div>
+          {!useCustomAddress ? (
+            <div className="space-y-4">
+              <button
+                type="button"
+                onClick={handleWalletLogin}
+                disabled={isSigning || isConnecting}
+                className="w-full bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 disabled:opacity-50 text-white font-bold py-4 rounded-2xl shadow-lg transition transform hover:-translate-y-0.5 flex items-center justify-center space-x-2 text-sm"
+              >
+                {isSigning ? (
+                  <>
+                    <i className="fa-solid fa-circle-notch fa-spin"></i>
+                    <span>Verifying Digital Signature...</span>
+                  </>
+                ) : isConnecting ? (
+                  <>
+                    <i className="fa-solid fa-circle-notch fa-spin"></i>
+                    <span>Connecting Web3 Wallet...</span>
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-wallet text-lg"></i>
+                    <span>Sign In with Web3 Digital Signature</span>
+                  </>
+                )}
+              </button>
 
-            <button
-              type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl shadow transition text-sm hover:shadow-md"
-            >
-              Login
-            </button>
-          </form>
-
-          {showOtpContainer && (
-            <div className="border-t border-slate-200 pt-6 space-y-4 animate-in fade-in">
-              <div className="bg-blue-50 p-4 rounded-xl text-center">
-                <p className="text-xs text-slate-600">Your Mobile Number is</p>
-                <p className="text-lg font-bold text-[#0f172a]">9900000099</p>
-              </div>
-
-              {showOtpInput ? (
-                <div className="space-y-3">
-                  <p className="text-xs text-slate-600 text-center">
-                    Enter 6-digit OTP:
-                  </p>
-                  <input
-                    type="text"
-                    value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value)}
-                    className="w-full text-center tracking-widest text-lg font-bold px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleVerifyOtp}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-xl shadow transition text-sm"
-                  >
-                    Verify & Proceed to Dashboard
-                  </button>
-                </div>
-              ) : (
+              <div className="text-center">
                 <button
                   type="button"
-                  onClick={handleTriggerOtp}
-                  className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-semibold py-2.5 rounded-xl shadow transition text-sm"
+                  onClick={() => setUseCustomAddress(true)}
+                  className="text-xs text-slate-500 hover:text-blue-600 transition font-medium"
                 >
-                  Verify Now
+                  Or authenticate with specific BSC Testnet address
                 </button>
-              )}
+              </div>
             </div>
+          ) : (
+            <form onSubmit={handleCustomAddressLogin} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+                  EVM Wallet Address (0x...)
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={customAddress}
+                  onChange={(e) => setCustomAddress(e.target.value)}
+                  placeholder="0x..."
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:outline-none text-xs font-mono"
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={isSigning}
+                  className="flex-grow bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold py-3 rounded-xl shadow transition text-xs"
+                >
+                  {isSigning ? "Verifying..." : "Verify Signature & Enter"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUseCustomAddress(false)}
+                  className="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition"
+                >
+                  Back
+                </button>
+              </div>
+            </form>
           )}
+
+          {/* Smart Contract Quick Reference on BSC Testnet */}
+          <div className="pt-4 border-t border-slate-100 space-y-2 text-[11px] text-slate-500">
+            <div className="flex justify-between items-center">
+              <span>Referral Contract:</span>
+              <a
+                href={`https://testnet.bscscan.com/address/${contractAddress}`}
+                target="_blank"
+                rel="noreferrer"
+                className="font-mono text-blue-600 hover:underline flex items-center gap-1 font-semibold"
+              >
+                <span>{contractAddress.substring(0, 6)}...{contractAddress.substring(38)}</span>
+                <i className="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
+              </a>
+            </div>
+            <div className="flex justify-between items-center">
+              <span>PVC Token Contract:</span>
+              <a
+                href={`https://testnet.bscscan.com/address/${tokenContractAddress}`}
+                target="_blank"
+                rel="noreferrer"
+                className="font-mono text-blue-600 hover:underline flex items-center gap-1 font-semibold"
+              >
+                <span>{tokenContractAddress.substring(0, 6)}...{tokenContractAddress.substring(38)}</span>
+                <i className="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
+              </a>
+            </div>
+          </div>
+
+          <div className="text-center pt-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab("register")}
+              className="text-xs text-blue-600 hover:underline font-semibold"
+            >
+              New wallet? Register on-chain account here
+            </button>
+          </div>
         </div>
       </div>
     </section>
