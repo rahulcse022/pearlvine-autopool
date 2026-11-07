@@ -5,7 +5,23 @@ import {
   ERC20_ABI,
   PVC_REFERRAL_SYSTEM_ABI,
 } from "@/constants/contractConfig";
-import { DigitalSignature, UplineSlot, ContractEarnings } from "@/types";
+import { DigitalSignature, UplineSlot, ContractEarnings, UserProfile } from "@/types";
+
+const JOIN_FIELD_MAX_LENGTH = 128;
+
+export function resolveSponsorAddress(sponsor?: string): string {
+  const trimmed = sponsor?.trim() ?? "";
+  if (trimmed && ethers.isAddress(trimmed)) {
+    return ethers.getAddress(trimmed);
+  }
+  return CONTRACT_CONSTANTS.ROOT_ADDRESS;
+}
+
+function sanitizeJoinField(value: string, fallback = ""): string {
+  const trimmed = value.trim();
+  if (!trimmed) return fallback;
+  return trimmed.slice(0, JOIN_FIELD_MAX_LENGTH);
+}
 
 export interface EthereumProvider {
   request: (args: { method: string; params?: unknown[] | Record<string, unknown> }) => Promise<unknown>;
@@ -160,18 +176,18 @@ export async function fetchLiveBlockchainState(userAddress: string) {
     balanceRaw,
     allowanceRaw,
     hasJoined,
-    userInfo,
+    referrerOfRaw,
+    isRoot,
     uplinesRaw,
     earningRaw,
-    airdropPaused,
   ] = await Promise.all([
     tokenContract.balanceOf(cleanAddress).catch(() => BigInt(0)),
     tokenContract.allowance(cleanAddress, CONTRACT_CONSTANTS.CONTRACT_ADDRESS).catch(() => BigInt(0)),
     referralContract.hasJoined(cleanAddress).catch(() => false),
-    referralContract.getUserInfo(cleanAddress).catch(() => ({ referrer: ethers.ZeroAddress, joined: false, root: false })),
+    referralContract.referrerOf(cleanAddress).catch(() => ethers.ZeroAddress),
+    referralContract.isRoot(cleanAddress).catch(() => false),
     referralContract.getUserUpline(cleanAddress).catch(() => Array(10).fill(ethers.ZeroAddress)),
-    referralContract.earning(cleanAddress).catch(() => [BigInt(0), BigInt(0), BigInt(0), BigInt(0)]),
-    referralContract.airdropPaused().catch(() => false),
+    referralContract.earning(cleanAddress).catch(() => [BigInt(0), BigInt(0)]),
   ]);
 
   const pvcBalance = Number(ethers.formatUnits(balanceRaw, 18));
@@ -180,8 +196,6 @@ export async function fetchLiveBlockchainState(userAddress: string) {
   const earnings: ContractEarnings = {
     directEarnings: Number(ethers.formatUnits(earningRaw[0] || BigInt(0), 18)),
     levelEarnings: Number(ethers.formatUnits(earningRaw[1] || BigInt(0), 18)),
-    airdropEarnings: Number(ethers.formatUnits(earningRaw[2] || BigInt(0), 18)),
-    pendingAirdropEarning: Number(ethers.formatUnits(earningRaw[3] || BigInt(0), 18)),
   };
 
   const uplines: UplineSlot[] = (uplinesRaw as string[]).map((addr, index) => {
@@ -198,12 +212,11 @@ export async function fetchLiveBlockchainState(userAddress: string) {
   return {
     pvcBalance,
     allowance,
-    hasJoined: Boolean(hasJoined || userInfo.joined),
-    referrerAddress: userInfo.referrer === ethers.ZeroAddress ? CONTRACT_CONSTANTS.ROOT_ADDRESS : userInfo.referrer,
-    isRoot: Boolean(userInfo.root),
+    hasJoined: Boolean(hasJoined),
+    referrerAddress: resolveSponsorAddress(referrerOfRaw),
+    isRoot: Boolean(isRoot),
     earnings,
     uplines,
-    airdropPaused: Boolean(airdropPaused),
   };
 }
 
@@ -224,10 +237,9 @@ export async function executeApprovePvcToken(
   return receipt.hash;
 }
 
-// Execute join(referrer) on BSC Testnet
 export async function executeJoinAutoPool(
   signer: ethers.Signer,
-  referrerAddress: string
+  profile: Pick<UserProfile, "name" | "email" | "mobile" | "referrerAddress">
 ): Promise<string> {
   const referralContract = new ethers.Contract(
     CONTRACT_CONSTANTS.CONTRACT_ADDRESS,
@@ -235,27 +247,20 @@ export async function executeJoinAutoPool(
     signer
   );
 
-  const cleanReferrer = ethers.isAddress(referrerAddress)
-    ? ethers.getAddress(referrerAddress)
-    : CONTRACT_CONSTANTS.ROOT_ADDRESS;
+  const signerAddress = await signer.getAddress();
+  const sponsor = resolveSponsorAddress(profile.referrerAddress);
 
-  const tx = await referralContract.join(cleanReferrer);
-  const receipt = await tx.wait(1);
-  return receipt.hash;
-}
+  if (sponsor.toLowerCase() === signerAddress.toLowerCase()) {
+    throw new Error("Sponsor cannot be your own wallet. Use the root contract or an existing member.");
+  }
 
-// Admin function: toggleAirdrop on BSC Testnet
-export async function executeToggleAirdrop(
-  signer: ethers.Signer,
-  status: boolean
-): Promise<string> {
-  const referralContract = new ethers.Contract(
-    CONTRACT_CONSTANTS.CONTRACT_ADDRESS,
-    PVC_REFERRAL_SYSTEM_ABI,
-    signer
-  );
-
-  const tx = await referralContract.toggleAirdrop(status);
+  const tx = await referralContract.join({
+    fullName: sanitizeJoinField(profile.name, "Member"),
+    email: sanitizeJoinField(profile.email),
+    mobile: sanitizeJoinField(profile.mobile),
+    sponsor,
+    joined: true,
+  });
   const receipt = await tx.wait(1);
   return receipt.hash;
 }

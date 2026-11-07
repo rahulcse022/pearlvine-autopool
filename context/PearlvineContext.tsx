@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { ethers } from "ethers";
 import {
   TabType,
@@ -9,23 +10,23 @@ import {
   ClaimItem,
   ReferralItem,
   TransactionItem,
-  ScratchCardItem,
   NotificationItem,
   ModalState,
   UplineSlot,
   TokenConfig,
   DigitalSignature,
+  ClaimCategory,
 } from "@/types";
 import {
   INITIAL_USER,
   INITIAL_CLAIMS,
   INITIAL_REFERRALS,
-  INITIAL_SCRATCH_CARDS,
   INITIAL_TRANSACTIONS,
   INITIAL_NOTIFICATIONS,
   INITIAL_UPLINES,
 } from "@/constants/mockData";
 import { CONTRACT_CONSTANTS } from "@/constants/contractConfig";
+import { APP_PATHS, pathToTab, tabToPath } from "@/constants/routes";
 import {
   getBrowserProvider,
   switchToBscTestnet,
@@ -34,7 +35,7 @@ import {
   fetchLiveBlockchainState,
   executeApprovePvcToken,
   executeJoinAutoPool,
-  executeToggleAirdrop,
+  resolveSponsorAddress,
 } from "@/services/web3Service";
 
 interface PearlvineContextType {
@@ -45,11 +46,9 @@ interface PearlvineContextType {
   user: UserProfile;
   claims: ClaimItem[];
   referrals: ReferralItem[];
-  scratchCards: ScratchCardItem[];
   transactions: TransactionItem[];
   notifications: NotificationItem[];
   uplines: UplineSlot[];
-  airdropPaused: boolean;
   tokenConfig: TokenConfig;
   contractAddress: string;
   tokenContractAddress: string;
@@ -79,10 +78,7 @@ interface PearlvineContextType {
   ) => Promise<boolean>;
   approvePvcTokens: () => Promise<boolean>;
   joinAutoPool: () => Promise<boolean>;
-  claimAirdrop: () => boolean;
-  toggleAirdrop: (status: boolean) => Promise<void>;
-  revealScratchCard: (id: string) => void;
-  submitClaim: (amount: number, category?: "Airdrop Claim" | "Scratch Reward" | "Pool Claim") => boolean;
+  submitClaim: (amount: number, category?: ClaimCategory) => boolean;
   approveClaim: (claimId: string) => void;
   rejectClaim: (claimId: string) => void;
   syncBlockchainData: (address?: string) => Promise<void>;
@@ -93,20 +89,19 @@ const PearlvineContext = createContext<PearlvineContextType | undefined>(
 );
 
 export function PearlvineProvider({ children }: { children: ReactNode }) {
-  const [activeTab, setActiveTabState] = useState<TabType>("home");
+  const pathname = usePathname();
+  const router = useRouter();
+  const activeTab = pathToTab(pathname);
   const [userPane, setUserPaneState] = useState<UserPaneType>("main");
   const [user, setUser] = useState<UserProfile>(INITIAL_USER);
   const [claims, setClaims] = useState<ClaimItem[]>(INITIAL_CLAIMS);
   const [referrals, setReferrals] = useState<ReferralItem[]>(INITIAL_REFERRALS);
-  const [scratchCards, setScratchCards] =
-    useState<ScratchCardItem[]>(INITIAL_SCRATCH_CARDS);
   const [transactions, setTransactions] =
     useState<TransactionItem[]>(INITIAL_TRANSACTIONS);
   const [notifications] = useState<NotificationItem[]>(
     INITIAL_NOTIFICATIONS
   );
   const [uplines, setUplines] = useState<UplineSlot[]>(INITIAL_UPLINES);
-  const [airdropPaused, setAirdropPaused] = useState<boolean>(false);
 
   // Web3 State
   const [isWeb3Connected, setIsWeb3Connected] = useState<boolean>(false);
@@ -130,16 +125,31 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
     levelShare: CONTRACT_CONSTANTS.LEVEL_SHARE,
     adminReward: CONTRACT_CONSTANTS.ADMIN_REWARD,
     poolReward: CONTRACT_CONSTANTS.POOL_REWARD,
-    airdropReward: CONTRACT_CONSTANTS.AIRDROP_REWARD,
     maxLevels: CONTRACT_CONSTANTS.MAX_LEVELS,
   };
 
   const setActiveTab = (tab: TabType) => {
-    setActiveTabState(tab);
+    const nextPath = tabToPath(tab);
+    if (pathname !== nextPath) {
+      router.push(nextPath);
+    }
     if (typeof window !== "undefined") {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
+
+  useEffect(() => {
+    if (!isWeb3Connected && pathname === APP_PATHS.dashboard) {
+      router.replace(APP_PATHS.home);
+      return;
+    }
+    if (
+      isWeb3Connected &&
+      (pathname === APP_PATHS.login || pathname === APP_PATHS.register)
+    ) {
+      router.replace(APP_PATHS.dashboard);
+    }
+  }, [isWeb3Connected, pathname, router]);
 
   const setUserPane = (pane: UserPaneType) => {
     setUserPaneState(pane);
@@ -181,7 +191,6 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
         status: data.hasJoined ? "Active Pool Partner" : "Registered Member",
       }));
       setUplines(data.uplines);
-      setAirdropPaused(data.airdropPaused);
     } catch (err) {
       console.warn("Could not sync live blockchain data:", err);
     }
@@ -248,7 +257,6 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
       isWeb3Connected: false,
       signature: undefined,
     }));
-    setActiveTab("home");
     showModal("Disconnected", "Wallet session closed successfully.", "info");
   };
 
@@ -287,7 +295,6 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
         }));
 
         setIsSigning(false);
-        setActiveTab("dashboard");
         setUserPane("main");
 
         showModal(
@@ -336,7 +343,6 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
       }));
 
       setIsSigning(false);
-      setActiveTab("dashboard");
       setUserPane("main");
 
       showModal(
@@ -383,9 +389,7 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
         activeAddr = ethers.Wallet.createRandom().address;
       }
 
-      const cleanSponsor = sponsor.trim() && ethers.isAddress(sponsor.trim())
-        ? ethers.getAddress(sponsor.trim())
-        : CONTRACT_CONSTANTS.ROOT_ADDRESS;
+      const cleanSponsor = resolveSponsorAddress(sponsor);
 
       const randomAcc = "100" + Math.floor(100000000 + Math.random() * 900000000).toString();
       const { message, timestamp } = createAuthChallenge(activeAddr);
@@ -419,7 +423,6 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
         status: "Registered Member",
         pvcBalance: 250_000,
         allowance: 0,
-        scratchBalance: CONTRACT_CONSTANTS.AIRDROP_REWARD,
         autoPoolEarnings: 0,
         isPoolJoined: false,
         isRoot: false,
@@ -428,8 +431,6 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
         earnings: {
           directEarnings: 0,
           levelEarnings: 0,
-          airdropEarnings: 0,
-          pendingAirdropEarning: CONTRACT_CONSTANTS.AIRDROP_REWARD,
         },
       });
 
@@ -447,7 +448,6 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
       await syncBlockchainData(activeAddr);
 
       setIsSigning(false);
-      setActiveTab("dashboard");
       setUserPane("main");
 
       showModal(
@@ -521,7 +521,6 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Step 2: Join Auto Pool on BSC Testnet (calls join(referrer))
   const joinAutoPool = async (): Promise<boolean> => {
     if (user.isPoolJoined) {
       showModal(
@@ -563,14 +562,13 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
           await executeApprovePvcToken(signer, joinCost);
         }
 
-        // 2. Call join(referrer) on contract
         showModal(
           "Confirming Join Transaction",
           "Please confirm the join transaction in your wallet on BSC Testnet...",
           "info"
         );
 
-        const txHash = await executeJoinAutoPool(signer, user.referrerAddress);
+        const txHash = await executeJoinAutoPool(signer, user);
 
         // Update state
         setUser((prev) => ({
@@ -583,7 +581,7 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
 
         const newTxn: TransactionItem = {
           id: `TXN-${Math.floor(100000 + Math.random() * 900000)}`,
-          type: "join(address referrer) on BSC Testnet",
+          type: "join(UserInfo) on BSC Testnet",
           amount: joinCost,
           isPositive: false,
           date: new Date().toISOString().slice(0, 16).replace("T", " "),
@@ -605,16 +603,11 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
       }
 
       // Simulation mode fallback
-      const airdropBonus = !airdropPaused ? CONTRACT_CONSTANTS.AIRDROP_REWARD : 0;
       setUser((prev) => ({
         ...prev,
-        pvcBalance: prev.pvcBalance - joinCost + airdropBonus,
+        pvcBalance: prev.pvcBalance - joinCost,
         isPoolJoined: true,
         status: "Active Pool Partner",
-        earnings: {
-          ...prev.earnings,
-          airdropEarnings: prev.earnings.airdropEarnings + airdropBonus,
-        },
       }));
 
       const newTxn: TransactionItem = {
@@ -643,108 +636,9 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Toggle Airdrop (Owner contract function)
-  const toggleAirdrop = async (status: boolean) => {
-    try {
-      const browserProvider = getBrowserProvider();
-      if (browserProvider && isWeb3Connected) {
-        const signer = await browserProvider.getSigner();
-        showModal("Updating Contract", "Sending toggleAirdrop transaction to BSC Testnet...", "info");
-        const txHash = await executeToggleAirdrop(signer, status);
-        setAirdropPaused(status);
-        showModal(
-          "Airdrop Status Updated",
-          `Airdrop status updated on BSC Testnet.\nTx Hash: ${txHash}`,
-          "success"
-        );
-        return;
-      }
-
-      setAirdropPaused(status);
-      showModal(
-        "Airdrop Status Updated",
-        `Smart contract airdrop is now ${status ? "Paused" : "Active"}.`,
-        "info"
-      );
-    } catch (err: unknown) {
-      const errMsg = err instanceof Error ? err.message : "Only contract owner can toggle airdrop.";
-      showModal("Toggle Failed", errMsg, "warning");
-    }
-  };
-
-  const claimAirdrop = (): boolean => {
-    if (user.earnings.pendingAirdropEarning <= 0) {
-      showModal("No Pending Airdrop", "You do not have any pending airdrop to claim.", "warning");
-      return false;
-    }
-
-    const claimAmt = user.earnings.pendingAirdropEarning;
-    setUser((prev) => ({
-      ...prev,
-      pvcBalance: prev.pvcBalance + claimAmt,
-      earnings: {
-        ...prev.earnings,
-        airdropEarnings: prev.earnings.airdropEarnings + claimAmt,
-        pendingAirdropEarning: 0,
-      },
-    }));
-
-    const newTxn: TransactionItem = {
-      id: `TXN-${Math.floor(100000 + Math.random() * 900000)}`,
-      type: "Airdrop Claim Settled",
-      amount: claimAmt,
-      isPositive: true,
-      date: new Date().toISOString().slice(0, 16).replace("T", " "),
-      status: "Success",
-    };
-    setTransactions((prev) => [newTxn, ...prev]);
-
-    showModal(
-      "Airdrop Claimed",
-      `Success! ${claimAmt} PVC airdrop reward has been transferred to your primary balance.`,
-      "success"
-    );
-    return true;
-  };
-
-  const revealScratchCard = (id: string) => {
-    const card = scratchCards.find((c) => c.id === id);
-    if (!card || card.isRevealed) return;
-
-    setScratchCards((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, isRevealed: true } : c))
-    );
-
-    setUser((prev) => ({
-      ...prev,
-      scratchBalance: prev.scratchBalance + card.amount,
-      pvcBalance: prev.pvcBalance + card.amount,
-      earnings: {
-        ...prev.earnings,
-        airdropEarnings: prev.earnings.airdropEarnings + card.amount,
-      },
-    }));
-
-    const newTxn: TransactionItem = {
-      id: `TXN-${Math.floor(100000 + Math.random() * 900000)}`,
-      type: `Airdrop Mystery Box Revealed (${card.cardCode})`,
-      amount: card.amount,
-      isPositive: true,
-      date: new Date().toISOString().slice(0, 16).replace("T", " "),
-      status: "Success",
-    };
-    setTransactions((prev) => [newTxn, ...prev]);
-
-    showModal(
-      "Airdrop Reward Unlocked!",
-      `Congratulations! You opened ${card.cardCode} and received +${card.amount} PVC credited to your balance.`,
-      "success"
-    );
-  };
-
   const submitClaim = (
     amount: number,
-    category: "Airdrop Claim" | "Scratch Reward" | "Pool Claim" = "Airdrop Claim"
+    category: ClaimCategory = "Pool Claim"
   ): boolean => {
     if (amount <= 0) {
       showModal("Invalid Amount", "Please enter a valid claim amount.", "warning");
@@ -818,11 +712,9 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
         user,
         claims,
         referrals,
-        scratchCards,
         transactions,
         notifications,
         uplines,
-        airdropPaused,
         tokenConfig,
         contractAddress: CONTRACT_CONSTANTS.CONTRACT_ADDRESS,
         tokenContractAddress: CONTRACT_CONSTANTS.TOKEN_CONTRACT_ADDRESS,
@@ -842,9 +734,6 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
         registerWithSignature,
         approvePvcTokens,
         joinAutoPool,
-        claimAirdrop,
-        toggleAirdrop,
-        revealScratchCard,
         submitClaim,
         approveClaim,
         rejectClaim,

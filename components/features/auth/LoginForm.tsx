@@ -34,10 +34,6 @@ export default function LoginForm() {
         <div className="bg-[#0f172a] text-white p-6 sm:p-7 border-b border-slate-800">
           <div className="flex items-center justify-between">
             <div>
-              <div className="inline-flex items-center gap-1.5 bg-blue-500/20 text-cyan-400 text-[10px] font-bold px-2.5 py-1 rounded-full border border-cyan-500/30 mb-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping"></span>
-                BSC Testnet (Chain ID: 97)
-              </div>
               <h2 className="text-2xl font-black tracking-tight">Web3 Authentication</h2>
               <p className="text-xs text-slate-400 mt-1">
                 Passwordless login via Cryptographic Digital Signature Verification
@@ -51,15 +47,7 @@ export default function LoginForm() {
 
         <div className="p-6 sm:p-8 space-y-6">
           {/* Digital Signature Info Banner */}
-          <div className="bg-blue-50/70 border border-blue-100 p-4 rounded-2xl flex items-start space-x-3 text-xs text-blue-900">
-            <i className="fa-solid fa-shield-halved text-blue-600 text-base mt-0.5"></i>
-            <div>
-              <span className="font-bold block">No Passwords Required</span>
-              <span className="text-blue-700 leading-relaxed text-[11px] block mt-0.5">
-                Authentication relies on EIP-191 off-chain digital signatures verified by your private key. Safe, decentralized, and zero gas fees.
-              </span>
-            </div>
-          </div>
+        
 
           {!useCustomAddress ? (
             <div className="space-y-4">

@@ -3,7 +3,6 @@ import {
   ClaimItem,
   ReferralItem,
   TransactionItem,
-  ScratchCardItem,
   NotificationItem,
   UplineSlot,
 } from "@/types";
@@ -12,14 +11,13 @@ import { CONTRACT_CONSTANTS } from "./contractConfig";
 export const INITIAL_USER: UserProfile = {
   name: "Santosh Kumar",
   accountNo: "123456789012",
-  walletAddress: "0x71C93aE54dE7bB4310E3F3203f7a40bAc2564e8B",
+  walletAddress: "0x71C93aE54dE7Bb4310E3F3203F7a40bac2564E8b",
   referrerAddress: CONTRACT_CONSTANTS.ROOT_ADDRESS,
   email: "santosh@example.com",
   mobile: "+91 9900000099",
   status: "Active Member",
   pvcBalance: 250_000, // Sufficient balance to test 200,000 PVC joining
   allowance: 0,
-  scratchBalance: 500,
   autoPoolEarnings: 100_000,
   isPoolJoined: false,
   isRoot: false,
@@ -27,8 +25,6 @@ export const INITIAL_USER: UserProfile = {
   earnings: {
     directEarnings: 100_000, // 2 active direct referrals * 50,000 PVC
     levelEarnings: 800, // 8 team matrix transactions * 100 PVC
-    airdropEarnings: 500, // 500 PVC welcome airdrop
-    pendingAirdropEarning: 500, // 500 PVC ready to claim
   },
 };
 
@@ -49,18 +45,18 @@ export const INITIAL_CLAIMS: ClaimItem[] = [
   {
     id: "CLM-9012",
     accountNo: "123456789012",
-    amount: 500,
+    amount: 100_000,
     date: "2026-10-18",
     status: "Pending Admin Approval",
-    category: "Airdrop Claim",
+    category: "Pool Claim",
   },
   {
     id: "CLM-8821",
     accountNo: "123456789012",
-    amount: 500,
+    amount: 100_000,
     date: "2026-10-15",
     status: "Approved & Paid",
-    category: "Airdrop Claim",
+    category: "Pool Claim",
   },
 ];
 
@@ -91,12 +87,6 @@ export const INITIAL_REFERRALS: ReferralItem[] = [
   },
 ];
 
-export const INITIAL_SCRATCH_CARDS: ScratchCardItem[] = [
-  { id: "1", cardCode: "AIRDROP-BOX-1", amount: 500, isRevealed: false },
-  { id: "2", cardCode: "AIRDROP-BOX-2", amount: 500, isRevealed: false },
-  { id: "3", cardCode: "AIRDROP-BOX-3", amount: 500, isRevealed: false },
-];
-
 export const INITIAL_TRANSACTIONS: TransactionItem[] = [
   {
     id: "TXN-778901",
@@ -115,15 +105,6 @@ export const INITIAL_TRANSACTIONS: TransactionItem[] = [
     date: "2026-10-18 16:45",
     status: "Success",
     txHash: "0x12ec...99a0",
-  },
-  {
-    id: "TXN-778720",
-    type: "Airdrop Claim Received",
-    amount: CONTRACT_CONSTANTS.AIRDROP_REWARD, // +500 PVC
-    isPositive: true,
-    date: "2026-10-17 11:30",
-    status: "Success",
-    txHash: "0x34bc...e891",
   },
   {
     id: "TXN-778601",
@@ -153,8 +134,8 @@ export const INITIAL_NOTIFICATIONS: NotificationItem[] = [
   },
   {
     id: "3",
-    title: "Airdrop Reward Available",
-    message: "Airdrop of 500 PVC ready in pending earnings. Click Claim to transfer to wallet.",
+    title: "Auto Pool Share Allocated",
+    message: "100,000 PVC from a new join was reserved in the global auto pool for community distribution.",
     time: "1 day ago",
     type: "info",
   },

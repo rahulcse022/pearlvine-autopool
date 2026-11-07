@@ -30,10 +30,6 @@ export default function RegisterForm() {
         {/* Header */}
         <div className="bg-[#0f172a] text-white p-6 sm:p-7 border-b border-slate-800 flex justify-between items-center">
           <div>
-            <div className="inline-flex items-center gap-1.5 bg-blue-500/20 text-cyan-400 text-[10px] font-bold px-2.5 py-1 rounded-full border border-cyan-500/30 mb-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping"></span>
-              BSC Testnet (Chain ID: 97)
-            </div>
             <h2 className="text-2xl font-black">Register with Digital Signature</h2>
             <p className="text-xs text-slate-400 mt-0.5">Passwordless Web3 Identity</p>
           </div>

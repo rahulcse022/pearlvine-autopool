@@ -11,11 +11,12 @@ export type UserPaneType =
   | "autopool"
   | "referrals"
   | "level"
-  | "scratch"
   | "claims"
   | "transactions"
   | "notifications"
   | "profile";
+
+export type ClaimCategory = "Pool Claim" | "Level Reward";
 
 export interface DigitalSignature {
   message: string;
@@ -28,8 +29,6 @@ export interface DigitalSignature {
 export interface ContractEarnings {
   directEarnings: number; // 50,000 PVC per direct
   levelEarnings: number; // 100 PVC per upline member
-  airdropEarnings: number; // 500 PVC claimed
-  pendingAirdropEarning: number; // 500 PVC waiting to be claimed
 }
 
 export interface UplineSlot {
@@ -46,7 +45,7 @@ export interface ClaimItem {
   amount: number;
   date: string;
   status: "Pending Admin Approval" | "Approved & Paid" | "Rejected";
-  category?: "Airdrop Claim" | "Scratch Reward" | "Pool Claim";
+  category?: ClaimCategory;
 }
 
 export interface ReferralItem {
@@ -66,13 +65,6 @@ export interface TransactionItem {
   date: string;
   status: "Success" | "Pending" | "Failed";
   txHash?: string;
-}
-
-export interface ScratchCardItem {
-  id: string;
-  cardCode: string;
-  amount: number;
-  isRevealed: boolean;
 }
 
 export interface NotificationItem {
@@ -100,7 +92,6 @@ export interface UserProfile {
   status: string;
   pvcBalance: number;
   allowance: number;
-  scratchBalance: number;
   autoPoolEarnings: number;
   isPoolJoined: boolean;
   isRoot: boolean;
@@ -116,6 +107,5 @@ export interface TokenConfig {
   levelShare: number;
   adminReward: number;
   poolReward: number;
-  airdropReward: number;
   maxLevels: number;
 }

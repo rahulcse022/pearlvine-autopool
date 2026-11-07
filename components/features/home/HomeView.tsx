@@ -32,12 +32,12 @@ export default function HomeView() {
         "10,000 PVC level share distributes 100 PVC to each of up to 10 existing upline members automatically.",
     },
     {
-      icon: "fa-gift",
-      color: "bg-purple-500/10 text-purple-500 border-purple-500/20",
-      title: "Airdrop Bonus (500 PVC)",
-      badge: "Joiner + Referrer",
+      icon: "fa-shield-halved",
+      color: "bg-slate-500/10 text-slate-600 border-slate-500/20",
+      title: "Admin Reserve (40,000 PVC)",
+      badge: "20% Infrastructure",
       description:
-        "500 PVC smart contract airdrop paid out of admin reserve for new members and their sponsors.",
+        "40,000 PVC plus any unpaid level share stays in the contract as admin reserve for protocol operations.",
     },
   ];
 

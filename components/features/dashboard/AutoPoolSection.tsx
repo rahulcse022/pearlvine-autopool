@@ -22,9 +22,7 @@ export default function AutoPoolSection() {
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-bold text-slate-900">Auto Pool Membership (200,000 PVC)</h2>
-            <span className="text-[10px] bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded">
-              BSC Testnet (Chain ID: 97)
-            </span>
+            
           </div>
           <p className="text-xs text-slate-500 mt-1">
             Exact 200,000 PVC entry fee strictly divided into Direct (50k), 10-Level Reward (10k), Admin Reserve (40k), and Global Auto Pool (100k).

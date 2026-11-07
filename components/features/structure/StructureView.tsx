@@ -45,7 +45,7 @@ export default function StructureView() {
                 200,000 PVC Per-Join Allocation Matrix
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                On-chain distribution split executed upon calling <code className="text-blue-600 font-mono bg-blue-50 px-1 py-0.5 rounded">join(address referrer)</code>
+                On-chain distribution split executed upon calling <code className="text-blue-600 font-mono bg-blue-50 px-1 py-0.5 rounded">join(UserInfo)</code>
               </p>
             </div>
             <button
@@ -139,17 +139,16 @@ export default function StructureView() {
           </div>
         </div>
 
-        {/* Airdrop & Admin Reserve Note */}
         <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 p-6 rounded-2xl border border-emerald-200/80 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="space-y-1">
             <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full">
-              Smart Contract Airdrop
+              Ready to Participate
             </span>
             <h4 className="text-lg font-bold text-slate-900">
-              500 PVC Airdrop to Joiner &amp; Referrer
+              Join the 200,000 PVC Auto Pool
             </h4>
             <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
-              As implemented in <code className="font-mono">contract/pvc_pool.sol</code>: Airdrops of 500 PVC to joiner and 500 PVC to referrer are paid out of the accumulated admin reserve whenever airdrop status is active (<code className="font-mono">!airdropPaused</code>).
+              Register with a valid sponsor and join on-chain. Direct (50,000 PVC), 10-level (100 PVC per upline), admin (40,000 PVC), and pool (100,000 PVC) shares execute automatically in <code className="font-mono">contract/pvc_pool.sol</code>.
             </p>
           </div>
           <button
@@ -157,7 +156,7 @@ export default function StructureView() {
             onClick={() => setActiveTab("register")}
             className="flex-shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow transition"
           >
-            Claim 500 PVC Airdrop
+            Join Auto Pool
           </button>
         </div>
       </div>

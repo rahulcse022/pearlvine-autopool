@@ -25,15 +25,3 @@
   background: #cbd5e1;
   border-radius: 3px;
 }
-
-/* Scratch Card styling */
-.scratch-card {
-  background: linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%);
-  cursor: pointer;
-  transition: all 0.3s ease;
-  user-select: none;
-}
-
-.scratch-card.revealed {
-  background: linear-gradient(135deg, #06b6d4 0%, #10b981 100%);
-}

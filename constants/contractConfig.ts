@@ -36,7 +36,6 @@ export const CONTRACT_CONSTANTS = {
   LEVEL_SHARE: 10_000, // 10,000 PVC total 10-level share (5%)
   ADMIN_REWARD: 40_000, // 40,000 PVC to admin reserve (20%)
   POOL_REWARD: 100_000, // 100,000 PVC to global auto pool (50%)
-  AIRDROP_REWARD: 500, // 500 PVC to joiner & 500 PVC to referrer (paid from adminReserve)
   MAX_LEVELS: 10, // Maximum 10 upline levels for level rewards
 
   // Allocation Percentages
@@ -75,7 +74,7 @@ export const JOIN_DISTRIBUTION_BREAKDOWN: DistributionRow[] = [
     recipient: "Admin & Infrastructure Reserve",
     amount: CONTRACT_CONSTANTS.ADMIN_REWARD,
     percentage: CONTRACT_CONSTANTS.PERCENTAGES.ADMIN,
-    description: "Contract maintenance, network security & airdrop funding pool",
+    description: "Contract maintenance and network security reserve",
     smartContractVar: "ADMIN_REWARD (40,000 PVC + remaining level share)",
   },
   {
@@ -105,21 +104,15 @@ export const ERC20_ABI = [
 export const PVC_REFERRAL_SYSTEM_ABI = [
   "function pvcToken() view returns (address)",
   "function referrerOf(address user) view returns (address)",
-  "function airdropPaused() view returns (bool)",
   "function owner() view returns (address)",
   "function hasJoined(address user) view returns (bool)",
   "function isRoot(address user) view returns (bool)",
-  "function join(address referrer)",
-  "function toggleAirdrop(bool status)",
-  "function getUserInfo(address user) view returns (tuple(address referrer, bool joined, bool root))",
+  "function join(tuple(string fullName, string email, string mobile, address sponsor, bool joined) user)",
+  "function userInfo(address user) view returns (string fullName, string email, string mobile, address sponsor, bool joined)",
   "function getUserUpline(address user) view returns (address[10] uplines)",
-  "function earning(address user) view returns (uint256 directEarnings, uint256 levelEarnings, uint256 airdropEarnings, uint256 pendingAirdropEarning)",
-  "function getTokenConfiguration() pure returns (tuple(uint256 joinAmount, uint256 directReward, uint256 levelReward, uint256 adminReward, uint256 poolReward, uint256 airdropReward))",
+  "function earning(address user) view returns (uint256 directEarnings, uint256 levelEarnings, uint256, uint256)",
+  "function getTokenConfiguration() pure returns (tuple(uint256 joinAmount, uint256 directReward, uint256 levelReward, uint256 adminReward, uint256 poolReward))",
   "event UserJoined(address indexed user, address indexed referrer)",
   "event DirectRewardPaid(address indexed user, address indexed referrer, uint256 amount)",
   "event LevelRewardPaid(address indexed user, address indexed upline, uint256 level, uint256 amount)",
-  "event AirdropPaid(address indexed user, uint256 amount)",
-  "event AirdropQueued(address indexed user, uint256 amount)",
-  "event AirdropClaimed(address indexed user, uint256 amount)",
-  "event AirdropStatusChanged(bool paused)",
 ];
