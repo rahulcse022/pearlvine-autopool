@@ -1,13 +1,25 @@
-// Web3 Service for BSC Testnet Integration & Digital Signature Verification
 import { ethers } from "ethers";
 import {
   CONTRACT_CONSTANTS,
   ERC20_ABI,
   PVC_REFERRAL_SYSTEM_ABI,
 } from "@/constants/contractConfig";
-import { DigitalSignature, UplineSlot, ContractEarnings, UserProfile } from "@/types";
+import { DEFAULT_TOKEN_CONFIG } from "@/constants/mockData";
+import {
+  DigitalSignature,
+  UplineSlot,
+  ContractEarnings,
+  UserProfile,
+  TokenConfig,
+  AutoPoolStatus,
+  ReferralItem,
+  LevelRewardItem,
+  LevelStat,
+} from "@/types";
 
 const JOIN_FIELD_MAX_LENGTH = 128;
+const DECIMALS = CONTRACT_CONSTANTS.TOKEN_DECIMALS;
+const PAGE_LIMIT = 100;
 
 export function resolveSponsorAddress(sponsor?: string): string {
   const trimmed = sponsor?.trim() ?? "";
@@ -23,8 +35,25 @@ function sanitizeJoinField(value: string, fallback = ""): string {
   return trimmed.slice(0, JOIN_FIELD_MAX_LENGTH);
 }
 
+function toPvc(value: bigint | number | string | undefined): number {
+  try {
+    return Number(ethers.formatUnits(value ?? 0, DECIMALS));
+  } catch {
+    return Number(value ?? 0);
+  }
+}
+
+function formatJoinedAt(joinedAt: bigint | number | string | undefined): string {
+  const seconds = Number(joinedAt ?? 0);
+  if (!seconds) return "";
+  return new Date(seconds * 1000).toISOString().slice(0, 10);
+}
+
 export interface EthereumProvider {
-  request: (args: { method: string; params?: unknown[] | Record<string, unknown> }) => Promise<unknown>;
+  request: (args: {
+    method: string;
+    params?: unknown[] | Record<string, unknown>;
+  }) => Promise<unknown>;
   send?: (method: string, params?: unknown[]) => Promise<unknown>;
   on?: (eventName: string, handler: (...args: unknown[]) => void) => void;
   removeListener?: (eventName: string, handler: (...args: unknown[]) => void) => void;
@@ -36,7 +65,6 @@ declare global {
   }
 }
 
-// Read-only JSON-RPC provider on BSC Testnet (always available even if wallet is disconnected)
 export function getReadProvider(): ethers.JsonRpcProvider {
   return new ethers.JsonRpcProvider(CONTRACT_CONSTANTS.BSC_TESTNET.rpcUrls[0], {
     name: CONTRACT_CONSTANTS.BSC_TESTNET.chainName,
@@ -44,7 +72,6 @@ export function getReadProvider(): ethers.JsonRpcProvider {
   });
 }
 
-// Browser provider (MetaMask / TrustWallet / Rabby)
 export function getBrowserProvider(): ethers.BrowserProvider | null {
   if (typeof window !== "undefined" && window.ethereum) {
     return new ethers.BrowserProvider(window.ethereum as ethers.Eip1193Provider);
@@ -52,10 +79,9 @@ export function getBrowserProvider(): ethers.BrowserProvider | null {
   return null;
 }
 
-// Helper to switch or add BSC Testnet to user's wallet
 export async function switchToBscTestnet(): Promise<boolean> {
   if (typeof window === "undefined" || !window.ethereum) {
-    throw new Error("No Web3 wallet extension found. Please install MetaMask or Trust Wallet.");
+    throw new Error("No Web3 wallet found. Please install MetaMask.");
   }
 
   try {
@@ -66,54 +92,39 @@ export async function switchToBscTestnet(): Promise<boolean> {
     return true;
   } catch (switchError: unknown) {
     const err = switchError as { code?: number; data?: { originalError?: { code?: number } } };
-    // Error code 4902 indicates that the chain has not been added to MetaMask
     if (err?.code === 4902 || err?.data?.originalError?.code === 4902) {
-      try {
-        await window.ethereum.request({
-          method: "wallet_addEthereumChain",
-          params: [
-            {
-              chainId: CONTRACT_CONSTANTS.BSC_TESTNET.chainIdHex,
-              chainName: CONTRACT_CONSTANTS.BSC_TESTNET.chainName,
-              nativeCurrency: CONTRACT_CONSTANTS.BSC_TESTNET.nativeCurrency,
-              rpcUrls: CONTRACT_CONSTANTS.BSC_TESTNET.rpcUrls,
-              blockExplorerUrls: CONTRACT_CONSTANTS.BSC_TESTNET.blockExplorerUrls,
-            },
-          ],
-        });
-        return true;
-      } catch (addError) {
-        console.error("Failed to add BSC Testnet:", addError);
-        throw addError;
-      }
+      await window.ethereum.request({
+        method: "wallet_addEthereumChain",
+        params: [
+          {
+            chainId: CONTRACT_CONSTANTS.BSC_TESTNET.chainIdHex,
+            chainName: CONTRACT_CONSTANTS.BSC_TESTNET.chainName,
+            nativeCurrency: CONTRACT_CONSTANTS.BSC_TESTNET.nativeCurrency,
+            rpcUrls: CONTRACT_CONSTANTS.BSC_TESTNET.rpcUrls,
+            blockExplorerUrls: CONTRACT_CONSTANTS.BSC_TESTNET.blockExplorerUrls,
+          },
+        ],
+      });
+      return true;
     }
-    console.error("Failed to switch to BSC Testnet:", switchError);
     throw switchError;
   }
 }
 
-// Generate authentication challenge for Digital Signature Verification
 export function createAuthChallenge(address: string): { message: string; timestamp: number } {
   const timestamp = Date.now();
   const message = [
-    "=== Pearlvine PVC Referral System Authentication ===",
+    "Pearlvine PVC Authentication",
     "",
-    "Please digitally sign this message to verify your wallet ownership and authenticate securely without a password.",
-    "",
-    `Signer Address: ${ethers.getAddress(address)}`,
-    `Network: BNB Smart Chain Testnet (Chain ID: ${CONTRACT_CONSTANTS.BSC_TESTNET.chainId})`,
+    `Wallet: ${ethers.getAddress(address)}`,
     `Contract: ${CONTRACT_CONSTANTS.CONTRACT_ADDRESS}`,
-    `Token: ${CONTRACT_CONSTANTS.TOKEN_CONTRACT_ADDRESS}`,
-    `Timestamp: ${new Date(timestamp).toISOString()}`,
-    `Security Nonce: ${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+    `Time: ${new Date(timestamp).toISOString()}`,
     "",
-    "Note: Signing this message does NOT cost any gas fee and does not trigger any blockchain transaction.",
+    "Signing this message does not cost gas.",
   ].join("\n");
-
   return { message, timestamp };
 }
 
-// Sign message with connected Web3 wallet
 export async function signAuthChallenge(
   signer: ethers.Signer,
   message: string,
@@ -121,117 +132,313 @@ export async function signAuthChallenge(
 ): Promise<DigitalSignature> {
   const signerAddress = await signer.getAddress();
   const signature = await signer.signMessage(message);
-
-  // Verify the signature immediately
   const recoveredAddress = ethers.verifyMessage(message, signature);
   const isValid = recoveredAddress.toLowerCase() === signerAddress.toLowerCase();
-
   if (!isValid) {
-    throw new Error("Digital signature verification failed: Signer mismatch.");
+    throw new Error("Signature verification failed.");
   }
+  return { message, signature, timestamp, signerAddress, isValid };
+}
 
+function getReferralContract(runner: ethers.ContractRunner) {
+  return new ethers.Contract(
+    CONTRACT_CONSTANTS.CONTRACT_ADDRESS,
+    PVC_REFERRAL_SYSTEM_ABI,
+    runner
+  );
+}
+
+function getTokenContract(runner: ethers.ContractRunner) {
+  return new ethers.Contract(
+    CONTRACT_CONSTANTS.TOKEN_CONTRACT_ADDRESS,
+    ERC20_ABI,
+    runner
+  );
+}
+
+export async function fetchTokenConfiguration(): Promise<TokenConfig> {
+  try {
+    const contract = getReferralContract(getReadProvider());
+    const config = await contract.getTokenConfiguration();
+    return {
+      joinAmount: toPvc(config.joinAmount),
+      adminReward: toPvc(config.adminReward),
+      directReward: toPvc(config.directReward),
+      levelShare: toPvc(config.levelShare),
+      levelReward: toPvc(config.levelReward),
+      maxLevels: Number(config.maxLevels),
+      autoPoolContribution: toPvc(config.autoPoolContribution),
+      autoPoolTarget: toPvc(config.autoPoolTarget),
+    };
+  } catch {
+    return DEFAULT_TOKEN_CONFIG;
+  }
+}
+
+type MemberDetailsRaw = {
+  wallet: string;
+  fullName: string;
+  email: string;
+  mobile: string;
+  joinedAt: bigint;
+  joined: boolean;
+};
+
+function mapMember(raw: MemberDetailsRaw) {
   return {
-    message,
-    signature,
-    timestamp,
-    signerAddress,
-    isValid,
+    address: ethers.getAddress(raw.wallet),
+    name: raw.fullName || "",
+    email: raw.email || "",
+    mobile: raw.mobile || "",
+    date: formatJoinedAt(raw.joinedAt),
+    status: (raw.joined ? "Joined" : "Active") as "Joined" | "Active",
   };
 }
 
-// Verify an existing signature
-export function verifySignature(
-  message: string,
-  signature: string,
-  expectedAddress: string
-): boolean {
+export async function fetchDirectReferrals(sponsorAddress: string): Promise<ReferralItem[]> {
   try {
-    const recovered = ethers.verifyMessage(message, signature);
-    return recovered.toLowerCase() === expectedAddress.toLowerCase();
-  } catch (err) {
-    console.error("Signature verification error:", err);
-    return false;
+    const contract = getReferralContract(getReadProvider());
+    const sponsor = ethers.getAddress(sponsorAddress);
+    const rows = (await contract.getDirectReferrals(sponsor, 0, PAGE_LIMIT)) as MemberDetailsRaw[];
+    return rows.map(mapMember).reverse();
+  } catch {
+    return [];
   }
 }
 
-// Fetch complete live on-chain state for a given wallet address from BSC Testnet
+async function fetchMemberProfile(
+  contract: ethers.Contract,
+  address: string
+): Promise<{ name: string; email: string; mobile: string }> {
+  if (address.toLowerCase() === CONTRACT_CONSTANTS.CONTRACT_ADDRESS.toLowerCase()) {
+    return { name: "Root Contract", email: "", mobile: "" };
+  }
+  try {
+    const info = await contract.userInfo(address);
+    return {
+      name: info.fullName || "",
+      email: info.email || "",
+      mobile: info.mobile || "",
+    };
+  } catch {
+    return { name: "", email: "", mobile: "" };
+  }
+}
+
+export async function enrichUplineSlots(
+  addresses: string[],
+  levelReward: number
+): Promise<UplineSlot[]> {
+  const contract = getReferralContract(getReadProvider());
+  return Promise.all(
+    Array.from({ length: CONTRACT_CONSTANTS.MAX_LEVELS }, async (_, index) => {
+      const raw = addresses[index];
+      const empty = !raw || raw === ethers.ZeroAddress;
+      if (empty) {
+        return {
+          level: index + 1,
+          address: "",
+          name: "",
+          email: "",
+          mobile: "",
+          amount: levelReward,
+          isPaid: false,
+        };
+      }
+      const address = ethers.getAddress(raw);
+      const profile = await fetchMemberProfile(contract, address);
+      return {
+        level: index + 1,
+        address,
+        name: profile.name,
+        email: profile.email,
+        mobile: profile.mobile,
+        amount: levelReward,
+        isPaid: true,
+      };
+    })
+  );
+}
+
+export async function fetchLevelBoard(userAddress: string): Promise<{
+  levelStats: LevelStat[];
+  levelRewards: LevelRewardItem[];
+}> {
+  const contract = getReferralContract(getReadProvider());
+  const user = ethers.getAddress(userAddress);
+  const emptyStats: LevelStat[] = Array.from(
+    { length: CONTRACT_CONSTANTS.MAX_LEVELS },
+    (_, i) => ({ level: i + 1, income: 0, joinings: 0 })
+  );
+
+  try {
+    const summary = await contract.getLevelSummary(user);
+    const earnings = summary.earnings ?? summary[0];
+    const counts = summary.memberCounts ?? summary[1];
+
+    const levelStats: LevelStat[] = Array.from(
+      { length: CONTRACT_CONSTANTS.MAX_LEVELS },
+      (_, i) => ({
+        level: i + 1,
+        income: toPvc(earnings[i]),
+        joinings: Number(counts[i] ?? 0),
+      })
+    );
+
+    const levelReward = CONTRACT_CONSTANTS.LEVEL_REWARD;
+    const memberBatches = await Promise.all(
+      levelStats
+        .filter((stat) => stat.joinings > 0)
+        .map(async (stat) => {
+          const rows = (await contract.getLevelMembers(
+            user,
+            stat.level,
+            0,
+            PAGE_LIMIT
+          )) as MemberDetailsRaw[];
+          return rows.map((row) => {
+            const member = mapMember(row);
+            return {
+              level: stat.level,
+              address: member.address,
+              name: member.name,
+              email: member.email,
+              mobile: member.mobile,
+              amount: levelReward,
+              date: member.date,
+              status: "Joined" as const,
+            };
+          });
+        })
+    );
+
+    return {
+      levelStats,
+      levelRewards: memberBatches.flat().reverse(),
+    };
+  } catch {
+    return { levelStats: emptyStats, levelRewards: [] };
+  }
+}
+
 export async function fetchLiveBlockchainState(userAddress: string) {
   const provider = getReadProvider();
   const cleanAddress = ethers.getAddress(userAddress);
+  const tokenContract = getTokenContract(provider);
+  const referralContract = getReferralContract(provider);
 
-  const tokenContract = new ethers.Contract(
-    CONTRACT_CONSTANTS.TOKEN_CONTRACT_ADDRESS,
-    ERC20_ABI,
-    provider
-  );
-
-  const referralContract = new ethers.Contract(
-    CONTRACT_CONSTANTS.CONTRACT_ADDRESS,
-    PVC_REFERRAL_SYSTEM_ABI,
-    provider
-  );
-
-  // Parallel requests to BSC Testnet
   const [
     balanceRaw,
     allowanceRaw,
     hasJoined,
     referrerOfRaw,
     isRoot,
+    userInfo,
+    earningsRaw,
     uplinesRaw,
-    earningRaw,
+    autoPoolStatusRaw,
+    currentRecipient,
+    queueLength,
+    totalJoined,
+    tokenConfig,
   ] = await Promise.all([
     tokenContract.balanceOf(cleanAddress).catch(() => BigInt(0)),
-    tokenContract.allowance(cleanAddress, CONTRACT_CONSTANTS.CONTRACT_ADDRESS).catch(() => BigInt(0)),
+    tokenContract
+      .allowance(cleanAddress, CONTRACT_CONSTANTS.CONTRACT_ADDRESS)
+      .catch(() => BigInt(0)),
     referralContract.hasJoined(cleanAddress).catch(() => false),
     referralContract.referrerOf(cleanAddress).catch(() => ethers.ZeroAddress),
     referralContract.isRoot(cleanAddress).catch(() => false),
+    referralContract.userInfo(cleanAddress).catch(() => ({
+      fullName: "",
+      email: "",
+      mobile: "",
+      sponsor: ethers.ZeroAddress,
+      joined: false,
+      joinedAt: BigInt(0),
+    })),
+    referralContract
+      .getUserEarnings(cleanAddress)
+      .catch(() => [BigInt(0), BigInt(0), BigInt(0)]),
     referralContract.getUserUpline(cleanAddress).catch(() => Array(10).fill(ethers.ZeroAddress)),
-    referralContract.earning(cleanAddress).catch(() => [BigInt(0), BigInt(0)]),
+    referralContract
+      .getAutoPoolStatus(cleanAddress)
+      .catch(() => [
+        BigInt(0),
+        ethers.parseUnits(String(CONTRACT_CONSTANTS.AUTOPOOL_TARGET), DECIMALS),
+        false,
+      ]),
+    referralContract.getCurrentAutoPoolRecipient().catch(() => ethers.ZeroAddress),
+    referralContract.getAutoPoolQueueLength().catch(() => BigInt(0)),
+    referralContract.totalJoined().catch(() => BigInt(0)),
+    fetchTokenConfiguration(),
   ]);
 
-  const pvcBalance = Number(ethers.formatUnits(balanceRaw, 18));
-  const allowance = Number(ethers.formatUnits(allowanceRaw, 18));
-
   const earnings: ContractEarnings = {
-    directEarnings: Number(ethers.formatUnits(earningRaw[0] || BigInt(0), 18)),
-    levelEarnings: Number(ethers.formatUnits(earningRaw[1] || BigInt(0), 18)),
+    directEarnings: toPvc(earningsRaw[0]),
+    levelEarnings: toPvc(earningsRaw[1]),
+    autoPoolEarnings: toPvc(earningsRaw[2]),
   };
 
-  const uplines: UplineSlot[] = (uplinesRaw as string[]).map((addr, index) => {
-    const isRoot = !addr || addr === ethers.ZeroAddress || addr.toLowerCase() === CONTRACT_CONSTANTS.ROOT_ADDRESS.toLowerCase();
-    return {
-      level: index + 1,
-      address: isRoot ? CONTRACT_CONSTANTS.ROOT_ADDRESS : addr,
-      amount: CONTRACT_CONSTANTS.LEVEL_REWARD,
-      isPaid: !isRoot,
-      status: isRoot ? "Empty / Root Reserve" : "Active",
-    };
-  });
+  const earned = toPvc(autoPoolStatusRaw[0]);
+  const target = toPvc(autoPoolStatusRaw[1]) || tokenConfig.autoPoolTarget;
+  const autoPool: AutoPoolStatus = {
+    earned,
+    target,
+    remaining: Math.max(0, target - earned),
+    completed: Boolean(autoPoolStatusRaw[2]),
+    currentRecipient:
+      !currentRecipient || currentRecipient === ethers.ZeroAddress
+        ? ""
+        : ethers.getAddress(currentRecipient),
+    queueLength: Number(queueLength),
+  };
+
+  const [uplines, referrals, levelBoard] = await Promise.all([
+    enrichUplineSlots(uplinesRaw as string[], tokenConfig.levelReward),
+    hasJoined ? fetchDirectReferrals(cleanAddress) : Promise.resolve([]),
+    hasJoined
+      ? fetchLevelBoard(cleanAddress)
+      : Promise.resolve({
+          levelStats: Array.from({ length: CONTRACT_CONSTANTS.MAX_LEVELS }, (_, i) => ({
+            level: i + 1,
+            income: 0,
+            joinings: 0,
+          })),
+          levelRewards: [],
+        }),
+  ]);
 
   return {
-    pvcBalance,
-    allowance,
+    pvcBalance: toPvc(balanceRaw),
+    allowance: toPvc(allowanceRaw),
     hasJoined: Boolean(hasJoined),
-    referrerAddress: resolveSponsorAddress(referrerOfRaw),
+    referrerAddress: resolveSponsorAddress(
+      userInfo.sponsor && userInfo.sponsor !== ethers.ZeroAddress
+        ? userInfo.sponsor
+        : referrerOfRaw
+    ),
     isRoot: Boolean(isRoot),
+    name: userInfo.fullName || "",
+    email: userInfo.email || "",
+    mobile: userInfo.mobile || "",
     earnings,
     uplines,
+    levelStats: levelBoard.levelStats,
+    levelRewards: levelBoard.levelRewards,
+    autoPool,
+    totalJoined: Number(totalJoined),
+    tokenConfig,
+    referrals,
   };
 }
 
-// Execute ERC-20 Approve on BSC Testnet
 export async function executeApprovePvcToken(
   signer: ethers.Signer,
-  amountPVC: number = CONTRACT_CONSTANTS.JOIN_AMOUNT
+  amountPVC: number
 ): Promise<string> {
-  const tokenContract = new ethers.Contract(
-    CONTRACT_CONSTANTS.TOKEN_CONTRACT_ADDRESS,
-    ERC20_ABI,
-    signer
-  );
-
-  const amountWei = ethers.parseUnits(amountPVC.toString(), 18);
+  const tokenContract = getTokenContract(signer);
+  const amountWei = ethers.parseUnits(amountPVC.toString(), DECIMALS);
   const tx = await tokenContract.approve(CONTRACT_CONSTANTS.CONTRACT_ADDRESS, amountWei);
   const receipt = await tx.wait(1);
   return receipt.hash;
@@ -241,17 +448,17 @@ export async function executeJoinAutoPool(
   signer: ethers.Signer,
   profile: Pick<UserProfile, "name" | "email" | "mobile" | "referrerAddress">
 ): Promise<string> {
-  const referralContract = new ethers.Contract(
-    CONTRACT_CONSTANTS.CONTRACT_ADDRESS,
-    PVC_REFERRAL_SYSTEM_ABI,
-    signer
-  );
-
+  const referralContract = getReferralContract(signer);
   const signerAddress = await signer.getAddress();
   const sponsor = resolveSponsorAddress(profile.referrerAddress);
 
   if (sponsor.toLowerCase() === signerAddress.toLowerCase()) {
-    throw new Error("Sponsor cannot be your own wallet. Use the root contract or an existing member.");
+    throw new Error("Sponsor cannot be your own wallet.");
+  }
+
+  const isValidSponsor = await referralContract.hasJoined(sponsor).catch(() => false);
+  if (!isValidSponsor) {
+    throw new Error("Sponsor has not joined the system.");
   }
 
   const tx = await referralContract.join({
@@ -259,7 +466,6 @@ export async function executeJoinAutoPool(
     email: sanitizeJoinField(profile.email),
     mobile: sanitizeJoinField(profile.mobile),
     sponsor,
-    joined: true,
   });
   const receipt = await tx.wait(1);
   return receipt.hash;

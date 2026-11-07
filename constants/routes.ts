@@ -2,8 +2,6 @@ import { TabType } from "@/types";
 
 export const APP_PATHS = {
   home: "/",
-  about: "/about",
-  structure: "/structure",
   login: "/login",
   register: "/register",
   dashboard: "/dashboard",

@@ -12,5 +12,4 @@ export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
   { pane: "autopool", label: "Auto Pool", icon: "fa-water", color: "text-cyan-400" },
   { pane: "referrals", label: "Direct Referrals", icon: "fa-users", color: "text-emerald-400" },
   { pane: "level", label: "Level Reward", icon: "fa-layer-group", color: "text-amber-400" },
-  
 ];

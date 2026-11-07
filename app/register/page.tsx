@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import { Suspense } from "react";
 import { usePearlvine } from "@/context/PearlvineContext";
 import RegisterForm from "@/components/features/auth/RegisterForm";
 
@@ -11,5 +11,13 @@ export default function RegisterPage() {
     return null;
   }
 
-  return <RegisterForm />;
+  return (
+    <Suspense
+      fallback={
+        <div className="py-16 text-center text-sm text-slate-500">Loading...</div>
+      }
+    >
+      <RegisterForm />
+    </Suspense>
+  );
 }

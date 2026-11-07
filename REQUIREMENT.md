@@ -1,232 +1,231 @@
-# PVC Referral & AutoPool System – Complete Development Requirements
+# PEARLVINE INTERNATIONAL – Website & Smart Contract Integration Requirements
 
-## 1. Project Overview
+## 1. Project Objective
 
-Update the existing PVC Referral System website and its smart contract integration according to the following business logic.
+Update the existing Pearlvine International website according to the PVC Referral and AutoPool smart contract requirements.
 
-The platform consists of:
-- User Registration / Referral System
-- Direct Referral Rewards
-- 10-Level Referral Rewards
-- FIFO-Based AutoPool System
-- User Earnings Dashboard
-- Admin Reserve Management
-- Transaction History
+**IMPORTANT: Keep the website simple. Do not create unnecessary pages, sections, routes or features.**
 
-**Important:** First inspect the existing project structure, smart contract ABI, contract address, frontend components, wallet integration and current UI theme. Modify the existing application instead of creating a completely new application.
+The website should have only the following:
 
-Do not unnecessarily change the existing design, theme, fonts, colors or layouts.
+1. Public Home Page
+2. Login
+3. Register
+4. Authenticated User Dashboard
+
+The existing website and its components must be reused wherever possible.
+
+First inspect the existing project structure, UI components, routing, wallet integration, smart contract ABI and existing dashboard implementation.
+
+Do not rebuild the complete website from scratch.
 
 ---
 
-## 2. Joining System
+## 2. Website Structure & Authentication
 
-Each wallet address can join the platform only ONCE.
+The website must support two different UI states.
 
-Joining requires:
+### A. Guest / Not Logged In
+
+When the user is not authenticated, display the Public Home Page.
+
+**Header Menu:**
+- Pearlvine International Logo
+- Login
+- Register
+- Hamburger Menu (if already part of the existing design)
+
+The guest menu must contain only:
+- Home
+- Login
+- Register
+
+Do not display authenticated dashboard options to guest users.
+
+### B. Authenticated User
+
+When the user successfully logs in using their wallet's digital signature, redirect them to the User Dashboard.
+
+Use the existing authenticated sidebar design shown in the provided first screenshot.
+
+**Authenticated Sidebar Menu:**
+
+1. Dashboard Overview
+2. Auto Pool
+3. Direct Referrals
+4. Level Reward
+5. Logout
+
+These are dashboard navigation sections, not additional standalone website pages.
+
+The sidebar design is already implemented. Reuse the existing sidebar and its styling.
+
+Do not create a new sidebar design.
+
+### Authentication Rules
+
+- Use wallet-based digital signature authentication.
+- Connect the user's wallet.
+- Request a signature to verify wallet ownership.
+- Use the existing authentication implementation if available.
+- Do not ask users to create a traditional username/password unless already required by the existing authentication system.
+- Preserve the authenticated session appropriately.
+- On logout, clear the authenticated session and return to the public Home Page.
+- If an unauthenticated user accesses a protected dashboard route, redirect them to Login.
+- If an authenticated user opens Login or Register, redirect them to Dashboard Overview.
+
+Never treat wallet connection alone as successful authentication. Verify the signature using the existing secure authentication flow.
+
+---
+
+## 3. Public Home Page
+
+Use the provided second screenshot as the reference for the existing Home Page design.
+
+Maintain its current visual appearance.
+
+### Home Page Header
+
+- Pearlvine International Logo
+- Login button
+- Register button
+- Responsive navigation
+
+### Hero Section
+
+Maintain the existing hero section:
+
+**Heading:**
+PVC Global Auto Pool & 10-Level Referral Reward
+
+**Description:**
+
+A fully automated, on-chain referral distribution system built with PVC tokens, providing direct referral rewards, 10-level uplines, admin reserve allocation and FIFO-based global AutoPool distribution.
+
+### Hero Buttons
+
+1. Join Auto Pool
+2. View Contract Structure
+
+Button functionality:
+
+- Join Auto Pool: Redirect to Register if the visitor is not authenticated. If already authenticated, open the joining interface in Dashboard Overview.
+- View Contract Structure: Scroll to the existing contract distribution information on the Home Page. Do not create a separate page.
+
+### Distribution Information
+
+Show the current smart contract distribution:
+
+| Distribution | Amount |
+|---|---:|
+| Join Amount | 5 PVC |
+| Admin Reward | 1 PVC |
+| Direct Reward | 1 PVC |
+| Level Reward | 1 PVC |
+| AutoPool Share | 2 PVC |
+| Total | 5 PVC |
+
+**Important:** The amounts shown above are the current configuration. Fetch the actual values from the smart contract instead of hardcoding them.
+
+Remove all outdated static values such as:
+- 200,000 PVC joining
+- 50,000 PVC direct reward
+- 100 PVC per level
+- 100,000 PVC AutoPool
+
+The Home Page must always display the configuration of the currently connected contract.
+
+Do not add unnecessary marketing sections, extra landing pages or additional navigation options.
+
+---
+
+## 4. Login Page
+
+Create or update the existing Login Page.
+
+### Login Process
+
+1. User opens Login.
+2. User connects their wallet.
+3. Website requests a digital signature.
+4. Backend or existing authentication mechanism verifies the signature.
+5. After successful authentication, redirect the user to Dashboard Overview.
+
+Show:
+- Wallet connection status
+- Connected wallet address
+- Sign Message button
+- Authentication loading state
+- Error and success notifications
+
+Do not implement fake authentication using only frontend state.
+
+---
+
+## 5. Register Page
+
+Create or update the existing Register Page.
+
+### Registration Form
+
+Fields:
 - Full Name
 - Email Address
 - Mobile Number
-- Sponsor / Referral Address
-- Connected Wallet
+- Sponsor / Referral Wallet Address
+- Connected Wallet Address
 
-The user must have sufficient PVC tokens in their wallet.
+### Referral Link Integration
 
-Before joining:
-1. Check the user's PVC token balance.
-2. Check whether the user has already joined.
-3. Validate the sponsor address.
-4. Check the PVC token allowance.
-5. If allowance is insufficient, call the ERC20 approve function.
-6. After successful approval, enable the Join button.
-7. Call the smart contract's join() function.
-8. Wait for transaction confirmation.
-9. Refresh user information, earnings, AutoPool status and transaction history.
+Support referral links in this format:
 
-The smart contract must remain the source of truth. Never show a successful joining status before the blockchain transaction is confirmed.
+https://yourwebsite.com/register?ref=WALLET_ADDRESS
 
-### Joining Amount
+When a user opens the registration link, automatically populate the Sponsor Address field.
 
-Current joining amount: 5 PVC.
+The sponsor address should be validated against the smart contract.
 
----
+### Registration Flow
 
-## 3. Joining Amount Distribution
+1. Connect wallet.
+2. Authenticate wallet using digital signature.
+3. Check whether the wallet has already joined.
+4. Validate sponsor address.
+5. Check PVC token balance.
+6. Check token allowance.
+7. Request token approval if required.
+8. Display joining amount and distribution.
+9. User confirms joining.
+10. Execute smart contract join() function.
+11. Wait for blockchain transaction confirmation.
+12. Redirect to Dashboard Overview.
 
-Every successful joining distributes exactly 5 PVC as follows:
+If the wallet has already joined, do not allow another registration.
 
-| Distribution | Amount | Recipient |
-|---|---:|---|
-| Admin Reward | 1 PVC | Contract balance / Admin Reserve |
-| Direct Referral | 1 PVC | Direct Sponsor |
-| Level Rewards | 1 PVC | Maximum 10 uplines |
-| AutoPool | 2 PVC | FIFO AutoPool recipient |
-| Total | 5 PVC | |
-
-All amounts must be fetched from the smart contract configuration wherever possible.
-
-Do not hardcode financial calculations in the frontend.
+One wallet address can join only once.
 
 ---
 
-## 4. Direct Referral Reward
+# 6. Authenticated User Dashboard
 
-Every successful joining generates 1 PVC as a direct referral reward.
+Reuse the existing dashboard and sidebar shown in the first screenshot.
 
-Rules:
-- The direct sponsor receives 1 PVC.
-- If the sponsor is the root contract address, the 1 PVC remains in the Admin Reserve.
-- Direct rewards are transferred immediately.
-- Update the direct sponsor's earning information.
-- Show direct reward transactions in the user's earning history.
+Do not create additional standalone pages.
 
----
+The dashboard will contain only these four navigation sections:
 
-## 5. Level Referral Reward
+### 6.1 Dashboard Overview
 
-The platform supports a maximum of 10 referral levels.
+Display the user's main information:
 
-Total level reward allocation per joining: 1 PVC.
-
-Each existing upline receives 0.1 PVC.
-
-Distribution examples:
-
-| Available Levels | Total Distributed | Admin Reserve |
-|---|---:|---:|
-| 0 | 0 PVC | 1 PVC |
-| 1 | 0.1 PVC | 0.9 PVC |
-| 2 | 0.2 PVC | 0.8 PVC |
-| 3 | 0.3 PVC | 0.7 PVC |
-| 5 | 0.5 PVC | 0.5 PVC |
-| 10 | 1 PVC | 0 PVC |
-
-Rules:
-- Start from the direct sponsor's upline.
-- Direct sponsor reward is handled separately.
-- Each existing upline receives 0.1 PVC.
-- Maximum 10 levels.
-- Root contract address does not receive level rewards.
-- Missing or unavailable levels are allocated to Admin Reserve.
-- Display level-wise earnings and referral information.
-
-The frontend should show:
-- Level 1 to Level 10.
-- Upline wallet address.
-- Number of members at each level, if available from contract data.
-- Total earnings from each level.
-
-Do not fabricate referral information if the contract does not expose it.
-
----
-
-## 6. AutoPool System (FIFO)
-
-AutoPool is the most important feature of this platform.
-
-### Current AutoPool Configuration
-
-- AutoPool contribution per joining: 2 PVC.
-- AutoPool target per user: 8 PVC.
-- Queue selection: FIFO (First In, First Out).
-
-### AutoPool Working Logic
-
-1. The first user who joins becomes the first AutoPool recipient.
-2. Every successful joining adds 2 PVC to the AutoPool distribution.
-3. The first user's own joining contribution is also counted.
-4. The first user receives 2 PVC from their own joining.
-5. Subsequent joining contributions continue going to the first user.
-6. Once the first user receives 8 PVC in total, their AutoPool is marked completed.
-7. The next eligible user in the FIFO queue becomes the active recipient.
-8. The process continues in the same order.
-
-### Example
-
-Assume users A, B, C, D and E join sequentially.
-
-| Joining | AutoPool Recipient | Reward | User A Total |
-|---|---|---:|---:|
-| A joins | A | 2 PVC | 2 PVC |
-| B joins | A | 2 PVC | 4 PVC |
-| C joins | A | 2 PVC | 6 PVC |
-| D joins | A | 2 PVC | 8 PVC |
-| E joins | B | 2 PVC | Completed |
-
-After User A completes 8 PVC, User B becomes the next recipient.
-
-### Important AutoPool Rules
-
-- Every joining creates a separate queue entry.
-- Each wallet can join only once.
-- A user's own 2 PVC contribution counts toward their 8 PVC AutoPool target.
-- Completed users must not receive additional AutoPool rewards.
-- FIFO order must always be maintained.
-- AutoPool rewards are transferred directly to the recipient.
-- AutoPool status must be fetched from blockchain data.
-
-### AutoPool UI
-
-Create an AutoPool section displaying:
-
-- Current AutoPool recipient.
-- Total AutoPool queue members.
-- User's AutoPool earnings.
-- AutoPool target.
-- Remaining amount to complete AutoPool.
-- AutoPool completion status.
-- Queue position, if available from contract data.
-
-Example:
-
-User AutoPool Progress:
-
-Earned: 6 PVC  
-Target: 8 PVC  
-Remaining: 2 PVC  
-Status: In Progress
-
-Show a progress bar representing the user's AutoPool completion.
-
----
-
-## 7. Admin Reserve
-
-Admin Reserve consists of:
-
-1. Fixed Admin Reward: 1 PVC per joining.
-2. Root Direct Referral Reward: 1 PVC when root is the sponsor.
-3. Unallocated Level Rewards.
-
-All these amounts must remain inside the smart contract.
-
-Admin withdrawal functionality:
-- Only contract owner can withdraw.
-- Withdrawal must not exceed available Admin Reserve.
-- Admin can specify the recipient address.
-- Display available reserve balance.
-- Display withdrawal transaction history.
-
-Use the contract's withdrawAdminReserve() function.
-
----
-
-## 8. User Dashboard UI
-
-Update the existing user dashboard to show the following information.
-
-### Dashboard Statistics
-
-- Total Joined Members.
-- Direct Referral Earnings.
-- Level Referral Earnings.
-- AutoPool Earnings.
-- Total Personal Earnings.
-- AutoPool Progress.
-- Sponsor Address.
-- Current AutoPool Queue Position, if available.
-
-### Earnings Calculation
+- Connected Wallet Address
+- Sponsor Address
+- Total Joined Members
+- Direct Referral Earnings
+- Level Referral Earnings
+- AutoPool Earnings
+- Total Personal Earnings
+- AutoPool Progress
 
 Total Personal Earnings:
 
@@ -234,107 +233,110 @@ Direct Earnings + Level Earnings + AutoPool Earnings.
 
 Do not include Admin Reserve in personal earnings.
 
-### Referral Section
+Also display the user's referral link with a Copy button.
 
-Display:
-- Referral link.
-- Referral wallet address.
-- Copy Referral Link button.
-- Direct Referrals.
-- Level-wise referral structure.
-- Referral joining status.
+### Joining Information
 
-Referral URL should contain the user's wallet address as the referral parameter.
+If the connected wallet has not joined:
+- Show joining form.
+- Show joining amount.
+- Show PVC balance.
+- Show approval status.
+- Show Join button.
 
-Example:
-
-https://yourwebsite.com/register?ref=WALLET_ADDRESS
-
-When a visitor opens this link, automatically populate the sponsor address in the registration form.
+If the wallet has already joined:
+- Show membership status.
+- Show joining details.
+- Do not show the joining form again.
 
 ---
 
-## 9. Joining Page UI
+### 6.2 Auto Pool
 
-Create or update the registration page with:
+Display AutoPool information inside the existing Auto Pool dashboard section.
 
-- Full Name input.
-- Email input.
-- Mobile Number input.
-- Sponsor Address input.
-- Connected Wallet Address.
-- Joining Amount.
-- PVC Wallet Balance.
-- Approval Status.
-- Join button.
+Show:
 
-Show a clear joining distribution preview:
+- Current AutoPool Recipient
+- Total Queue Members
+- User AutoPool Earnings
+- AutoPool Target
+- Remaining Amount
+- Completion Status
+- User Queue Position, if available
 
-| Reward Type | Amount |
-|---|---:|
-| Admin | 1 PVC |
-| Direct Referral | 1 PVC |
-| Level Rewards | 1 PVC |
-| AutoPool | 2 PVC |
-| Total | 5 PVC |
+### AutoPool Progress Example
 
-The amounts must be dynamically fetched from the contract.
+Earned: 6 PVC
 
-Display appropriate loading states and transaction notifications:
-- Approval Pending
-- Approval Successful
-- Joining Pending
-- Joining Successful
-- Transaction Failed
+Target: 8 PVC
+
+Remaining: 2 PVC
+
+Status: In Progress
+
+Use a progress bar.
+
+### AutoPool Business Logic
+
+- FIFO (First In, First Out).
+- Each joining contributes 2 PVC.
+- Each user has an 8 PVC AutoPool target.
+- The user's own joining contribution counts toward their target.
+- Once a user receives 8 PVC, the next user becomes eligible.
+- Completed users cannot receive additional AutoPool rewards.
+
+Fetch all values from smart contract data.
 
 ---
 
-## 10. Transaction History
-
-Create a transaction history section with the following categories:
-
-- Joining Transactions
-- Direct Referral Rewards
-- Level Referral Rewards
-- AutoPool Rewards
-- Admin Withdrawals (admin only)
+### 6.3 Direct Referrals
 
 Display:
-- Transaction Hash
-- Transaction Type
-- Amount
-- Date and Time
-- Status
+
+- Direct Referral Earnings
+- Direct Referral Count
+- Referral Link
+- Copy Referral Link
+- Direct Sponsor Information
+
+Show the user's direct referrals in a simple table.
+
+Table columns:
 - Wallet Address
+- Joining Status
+- Joining Date, if available from events
 
-Use blockchain events wherever possible.
-
-Relevant events:
-- UserJoined
-- DirectRewardPaid
-- LevelRewardPaid
-- AutoPoolQueued
-- AutoPoolRewardPaid
-- AutoPoolCompleted
-- AdminReserveAccrued
-- FundsWithdrawn
-
-Use pagination for large transaction histories.
+Use actual blockchain data. Do not create dummy referral records.
 
 ---
 
-## 11. Smart Contract Integration
+### 6.4 Level Reward
 
-Use the existing PVCReferralSystem smart contract.
+Display the 10-level referral reward structure.
 
-Important functions:
+Show:
+- Level 1 to Level 10
+- Upline Wallet Address
+- Level Reward Amount
+- Total Earnings from Each Level
 
-### Write Functions
+Current configuration:
+- Maximum Levels: 10
+- Reward Per Level: 0.1 PVC
+- Total Level Allocation: 1 PVC
 
-- join(UserInfo)
-- withdrawAdminReserve(address recipient, uint256 amount) — admin only
+Show only available upline information.
 
-### Read Functions
+Do not display fabricated users or referral relationships.
+
+---
+
+## 7. Smart Contract Integration
+
+Use the existing PVCReferralSystem smart contract and its deployed ABI.
+
+Important read functions:
 
 - hasJoined(address user)
 - isRoot(address user)
@@ -351,24 +353,26 @@ Important functions:
 - adminReserve()
 - totalJoined()
 
-### ERC20 Token Functions
+Write function:
+
+- join(UserInfo)
+
+ERC20 functions:
 
 - balanceOf(address)
 - allowance(address owner, address spender)
 - approve(address spender, uint256 amount)
 - decimals()
 
-Use the existing blockchain integration libraries and project architecture. Do not introduce unnecessary dependencies.
+Use smart contract events to retrieve relevant transaction information.
 
-Use BigInt or ethers.js formatUnits/parseUnits for token calculations. Never convert large token amounts directly into JavaScript Number.
+Do not change the existing smart contract business logic as part of frontend development.
+
+If an existing ABI or contract function does not support a requested UI field, report the limitation instead of displaying invented information.
 
 ---
 
-## 12. Dynamic Configuration
-
-The smart contract values can change in future deployments.
-
-Current configuration:
+## 8. Current Smart Contract Distribution
 
 | Variable | Current Value |
 |---|---:|
@@ -381,108 +385,141 @@ Current configuration:
 | AUTOPOOL_CONTRIBUTION | 2 PVC |
 | AUTOPOOL_TARGET | 8 PVC |
 
-Future example:
+All amounts must be fetched dynamically using getTokenConfiguration().
 
-| Variable | Future Value |
-|---|---:|
-| JOIN_AMOUNT | 500,000 PVC |
-| ADMIN_REWARD | 100,000 PVC |
-| DIRECT_REWARD | 100,000 PVC |
-| LEVEL_SHARE | 100,000 PVC |
-| LEVEL_REWARD | 10,000 PVC |
-| MAX_LEVELS | 10 |
-| AUTOPOOL_CONTRIBUTION | 200,000 PVC |
-| AUTOPOOL_TARGET | 800,000 PVC |
+Use token decimals and ethers.js formatting utilities or equivalent BigInt-safe calculations.
 
-The website must automatically display the correct values from the currently configured contract.
-
-Do not hardcode 5 PVC, 1 PVC, 0.1 PVC, 2 PVC or 8 PVC in UI components.
-
-Use the token decimals returned by the PVC token contract for formatting.
+Do not use JavaScript Number for large token amounts.
 
 ---
 
-## 13. UI/UX Requirements
+## 9. UI/UX Design Requirements
 
-Maintain the existing website's design language.
+### Public Website
 
-Requirements:
-- Fully responsive desktop, tablet and mobile layouts.
-- Clean and professional dashboard.
-- Modern cards for earnings.
-- Clear AutoPool progress indicator.
-- Referral tree visualization.
-- Level-wise earnings table.
-- Transaction history table.
-- Wallet connection status.
-- Loading skeletons.
-- Success and error notifications.
-- Proper empty states.
-- Copy-to-clipboard functionality.
-- Consistent spacing, typography and buttons.
+Follow the second screenshot:
+- Dark navy background.
+- Existing Pearlvine International logo.
+- Blue and cyan gradient buttons.
+- Existing hero section layout.
+- Existing typography.
+- Existing responsive design.
 
-Do not redesign the complete website unless required. Reuse existing components and styles wherever possible.
+### Authenticated Dashboard
 
----
+Follow the first screenshot:
+- Dark navy sidebar.
+- Existing logo placement.
+- Blue active menu background.
+- Existing icons and menu labels.
+- Existing spacing and typography.
+- Existing mobile sidebar behavior.
 
-## 14. Important Business Rules
+Do not introduce a different design theme.
 
-1. One wallet address can join only once.
-2. A wallet's sponsor is permanently assigned during its first successful joining.
-3. Direct rewards are distributed to the registered direct sponsor.
-4. Level rewards go to existing uplines, excluding the direct sponsor and root contract.
-5. Unallocated level rewards remain in Admin Reserve.
-6. Root direct rewards remain in Admin Reserve.
-7. Every joining creates one AutoPool queue entry.
-8. AutoPool follows FIFO.
-9. A user's own AutoPool contribution counts toward their target.
-10. AutoPool target is 8 PVC.
-11. Completed users cannot receive additional AutoPool rewards.
-12. Total distribution per joining must always equal the configured joining amount.
-13. The smart contract is the source of truth for all financial data.
-14. Never show fake or locally calculated transaction success.
-15. Do not allow users to change their registered sponsor.
-16. Do not introduce multiple joining functionality.
+### Responsive Design
+
+Ensure:
+- Desktop compatibility.
+- Tablet compatibility.
+- Mobile compatibility.
+- Existing sidebar opens and closes properly.
+- Dashboard sections render correctly on mobile.
 
 ---
 
-## 15. Development Instructions for Cursor AI
+## 10. Strict Scope – Pages Allowed
+
+**Only implement and maintain these website pages:**
+
+| Page | Access |
+|---|---|
+| Home | Public |
+| Login | Public |
+| Register | Public |
+| Dashboard | Authenticated |
+
+Dashboard contains four navigation sections:
+1. Dashboard Overview
+2. Auto Pool
+3. Direct Referrals
+4. Level Reward
+
+These sections must reuse the existing dashboard layout and sidebar.
+
+### Do NOT Create
+
+- Separate AutoPool website page.
+- Separate Direct Referral website page.
+- Separate Level Reward website page.
+- Admin Dashboard.
+- Admin Management Portal.
+- Separate Transaction History Page.
+- Profile Management Page.
+- Settings Page.
+- Notifications Page.
+- Support Page.
+- Any other unnecessary pages.
+
+Do not add features outside the defined scope.
+
+---
+
+## 11. Cursor AI Development Instructions
 
 Before making changes:
 
-1. Analyze the complete existing project.
-2. Identify the existing registration page, dashboard, referral page and transaction history.
-3. Inspect smart contract ABI and integration code.
-4. Identify existing wallet connection and token approval implementation.
-5. Check the current UI theme and reusable components.
+1. Analyze the existing project.
+2. Inspect existing routing.
+3. Inspect the current Home Page.
+4. Inspect the existing Login and Register components.
+5. Inspect the existing authenticated sidebar and dashboard.
+6. Inspect wallet connection and digital signature authentication.
+7. Inspect the deployed smart contract ABI and address.
+8. Identify reusable components.
 
-Then implement the requirements in the existing architecture.
+### Implementation Rules
 
-### Important Instructions
+- Reuse existing components.
+- Preserve existing UI designs shown in the screenshots.
+- Keep only the specified pages.
+- Do not create unnecessary routes.
+- Do not duplicate existing functionality.
+- Do not change smart contract business logic.
+- Do not hardcode financial values.
+- Maintain wallet authentication security.
+- Ensure all blockchain transactions are handled correctly.
+- Keep all financial information synchronized with on-chain data.
+- Maintain mobile responsiveness.
 
-- Do not create duplicate components.
-- Do not remove existing working functionality.
-- Do not modify smart contract business logic without explicit approval.
-- Do not hardcode financial values in frontend components.
-- Handle blockchain errors properly.
-- Handle transaction pending and confirmation states.
-- Ensure all displayed financial values match blockchain storage.
-- Use the correct network and deployed contract addresses from environment configuration.
-- Ensure mobile responsiveness.
+### Final Expected Result
 
-### Expected Deliverables
+The final website should work as follows:
 
-1. Updated registration/joining page.
-2. Updated user dashboard.
-3. Updated referral system UI.
-4. Updated AutoPool dashboard.
-5. Updated earnings section.
-6. Updated transaction history.
-7. Updated admin reserve section.
-8. Correct smart contract integration.
-9. Responsive UI across all screen sizes.
-10. No TypeScript, React or build errors.
+**Guest User:**
 
-After implementation, provide a summary of all modified files and explain the updated user flow.
+Home → Login / Register → Wallet Authentication → Dashboard
 
-Run the project's available lint, type-check and production build commands and fix any errors introduced by these changes.
+**New User:**
+
+Home → Register → Connect Wallet → Digital Signature → Enter Registration Details → Approve PVC → Join → Dashboard
+
+**Existing User:**
+
+Home → Login → Connect Wallet → Digital Signature → Dashboard
+
+**Authenticated User Menu:**
+
+Dashboard Overview | Auto Pool | Direct Referrals | Level Reward | Logout
+
+Logout → Public Home Page
+
+After implementation:
+- Provide a list of modified files.
+- Explain the authentication flow.
+- Explain the joining flow.
+- Verify dashboard navigation.
+- Run lint, type-check and production build.
+- Fix any errors introduced by the changes.
+
+**Final instruction: Keep the website minimal, clean and limited to the specified pages and dashboard sections. Do not overcomplicate the application.**

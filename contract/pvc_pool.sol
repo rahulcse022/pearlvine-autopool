@@ -1,8 +1,9 @@
 
-// SPDX-License-Identifier: MIT
+ // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
@@ -14,36 +15,46 @@ contract PVCReferralSystem is Ownable, ReentrancyGuard {
 
     uint256 private constant UNIT = 1e18;
 
-    // =================================================
+    // ============================================================
     // CONFIGURATION
-    // Change these values before deploying a new contract
-    // =================================================
+    // Change these values before deploying a NEW contract.
+    // ============================================================
 
     uint256 public constant JOIN_AMOUNT = 5 * UNIT;
-
     uint256 public constant ADMIN_REWARD = 1 * UNIT;
-
     uint256 public constant DIRECT_REWARD = 1 * UNIT;
-
     uint256 public constant LEVEL_SHARE = 1 * UNIT;
-
     uint256 public constant LEVEL_REWARD = 1e17; // 0.1 PVC
-
     uint256 public constant AUTOPOOL_CONTRIBUTION = 2 * UNIT;
-
     uint256 public constant AUTOPOOL_TARGET = 8 * UNIT;
-
     uint256 public constant MAX_LEVELS = 10;
 
-    // =================================================
+    // ============================================================
     // STRUCTS
-    // =================================================
+    // ============================================================
+
+    struct JoinInput {
+        string fullName;
+        string email;
+        string mobile;
+        address sponsor;
+    }
 
     struct UserInfo {
         string fullName;
         string email;
         string mobile;
         address sponsor;
+        bool joined;
+        uint256 joinedAt;
+    }
+
+    struct MemberDetails {
+        address wallet;
+        string fullName;
+        string email;
+        string mobile;
+        uint256 joinedAt;
         bool joined;
     }
 
@@ -64,38 +75,40 @@ contract PVCReferralSystem is Ownable, ReentrancyGuard {
         uint256 autoPoolTarget;
     }
 
-    // =================================================
+    // ============================================================
     // STORAGE
-    // =================================================
+    // ============================================================
 
     mapping(address => UserInfo) public userInfo;
-
     mapping(address => address) public referrerOf;
-
     mapping(address => Earning) public earning;
 
-    // Admin funds retained inside contract
+    // Direct referrals
+    mapping(address => address[]) private directReferrals;
+
+    // Members who generated level rewards for each upline
+    mapping(address => mapping(uint256 => address[]))
+        private levelMembers;
+
+    // Individual level earnings
+    mapping(address => mapping(uint256 => uint256))
+        public levelEarningsByLevel;
+
+    // Admin reserve
     uint256 public adminReserve;
 
     // Total registered members
     uint256 public totalJoined;
 
-    // =================================================
-    // AUTOPOOL STORAGE
-    // =================================================
-
-    // FIFO queue
+    // FIFO AutoPool queue
     address[] private autoPoolQueue;
-
-    // Current queue recipient index
     uint256 public autoPoolQueueHead;
 
-    // AutoPool completion status
     mapping(address => bool) public autoPoolCompleted;
 
-    // =================================================
+    // ============================================================
     // EVENTS
-    // =================================================
+    // ============================================================
 
     event UserJoined(
         address indexed user,
@@ -143,15 +156,19 @@ contract PVCReferralSystem is Ownable, ReentrancyGuard {
         uint256 amount
     );
 
-    // =================================================
+    // ============================================================
     // CONSTRUCTOR
-    // =================================================
+    // OpenZeppelin Contracts 5.x
+    // ============================================================
 
-    constructor(address _pvcToken)
-        Ownable(msg.sender)
-    {
+    constructor(address _pvcToken) Ownable(msg.sender) {
         require(_pvcToken != address(0), "Invalid token");
         require(_pvcToken.code.length > 0, "Token is not contract");
+
+        require(
+            IERC20Metadata(_pvcToken).decimals() == 18,
+            "PVC token must have 18 decimals"
+        );
 
         require(
             JOIN_AMOUNT ==
@@ -175,19 +192,16 @@ contract PVCReferralSystem is Ownable, ReentrancyGuard {
         pvcToken = IERC20(_pvcToken);
     }
 
-    // =================================================
+    // ============================================================
     // MEMBERSHIP
-    // =================================================
+    // ============================================================
 
     function _isMember(address user)
         private
         view
         returns (bool)
     {
-        return (
-            user == address(this) ||
-            referrerOf[user] != address(0)
-        );
+        return user == address(this) || userInfo[user].joined;
     }
 
     function hasJoined(address user)
@@ -206,31 +220,33 @@ contract PVCReferralSystem is Ownable, ReentrancyGuard {
         return user == address(this);
     }
 
-    // =================================================
+    // ============================================================
     // JOIN
-    // =================================================
+    // ============================================================
 
-    function join(UserInfo calldata _user)
+    function join(JoinInput calldata input)
         external
         nonReentrant
     {
         require(!_isMember(msg.sender), "Already joined");
+        require(input.sponsor != address(0), "Invalid referrer");
+        require(_isMember(input.sponsor), "Invalid referrer");
+        require(input.sponsor != msg.sender, "Self referral");
 
-        require(
-            _isMember(_user.sponsor),
-            "Invalid referrer"
-        );
-
-        // Register user
-        referrerOf[msg.sender] = _user.sponsor;
-
+        // Register user and permanently assign sponsor
         userInfo[msg.sender] = UserInfo({
-            fullName: _user.fullName,
-            email: _user.email,
-            mobile: _user.mobile,
-            sponsor: _user.sponsor,
-            joined: true
+            fullName: input.fullName,
+            email: input.email,
+            mobile: input.mobile,
+            sponsor: input.sponsor,
+            joined: true,
+            joinedAt: block.timestamp
         });
+
+        referrerOf[msg.sender] = input.sponsor;
+
+        // Store direct referral
+        directReferrals[input.sponsor].push(msg.sender);
 
         totalJoined++;
 
@@ -251,37 +267,37 @@ contract PVCReferralSystem is Ownable, ReentrancyGuard {
 
         uint256 toAdmin = ADMIN_REWARD;
 
-        // =================================================
+        // ========================================================
         // 1. DIRECT REFERRAL REWARD
-        // =================================================
+        // ========================================================
 
-        if (_user.sponsor == address(this)) {
+        if (input.sponsor == address(this)) {
 
-            // Root's direct reward stays in admin reserve
+            // Root direct reward goes to admin reserve
             toAdmin += DIRECT_REWARD;
 
         } else {
 
             pvcToken.safeTransfer(
-                _user.sponsor,
+                input.sponsor,
                 DIRECT_REWARD
             );
 
-            earning[_user.sponsor].directEarnings +=
+            earning[input.sponsor].directEarnings +=
                 DIRECT_REWARD;
 
             emit DirectRewardPaid(
                 msg.sender,
-                _user.sponsor,
+                input.sponsor,
                 DIRECT_REWARD
             );
         }
 
-        // =================================================
+        // ========================================================
         // 2. LEVEL REWARDS
-        // =================================================
+        // ========================================================
 
-        address upline = referrerOf[_user.sponsor];
+        address upline = referrerOf[input.sponsor];
 
         uint256 levelsPaid = 0;
 
@@ -290,6 +306,8 @@ contract PVCReferralSystem is Ownable, ReentrancyGuard {
             upline != address(0) &&
             upline != address(this)
         ) {
+            uint256 currentLevel = levelsPaid + 1;
+
             pvcToken.safeTransfer(
                 upline,
                 LEVEL_REWARD
@@ -298,19 +316,27 @@ contract PVCReferralSystem is Ownable, ReentrancyGuard {
             earning[upline].levelEarnings +=
                 LEVEL_REWARD;
 
+            levelEarningsByLevel[upline][currentLevel] +=
+                LEVEL_REWARD;
+
+            // Store member under this upline and level
+            levelMembers[upline][currentLevel].push(
+                msg.sender
+            );
+
             levelsPaid++;
 
             emit LevelRewardPaid(
                 msg.sender,
                 upline,
-                levelsPaid,
+                currentLevel,
                 LEVEL_REWARD
             );
 
             upline = referrerOf[upline];
         }
 
-        // Unpaid level amount goes to admin reserve
+        // Unpaid level share goes to admin reserve
         toAdmin += (
             LEVEL_SHARE -
             (levelsPaid * LEVEL_REWARD)
@@ -323,21 +349,21 @@ contract PVCReferralSystem is Ownable, ReentrancyGuard {
             adminReserve
         );
 
-        // =================================================
+        // ========================================================
         // 3. AUTOPOOL REWARD
-        // =================================================
+        // ========================================================
 
         _processAutoPool(msg.sender);
-        
+
         emit UserJoined(
             msg.sender,
-            _user.sponsor
+            input.sponsor
         );
     }
 
-    // =================================================
+    // ============================================================
     // AUTOPOOL FIFO PROCESSING
-    // =================================================
+    // ============================================================
 
     function _processAutoPool(address joiningUser)
         private
@@ -357,15 +383,21 @@ contract PVCReferralSystem is Ownable, ReentrancyGuard {
             uint256 alreadyEarned =
                 earning[recipient].autoPoolEarnings;
 
+            // Skip already completed recipients
+            if (alreadyEarned >= AUTOPOOL_TARGET) {
+                autoPoolCompleted[recipient] = true;
+                autoPoolQueueHead++;
+                continue;
+            }
+
             uint256 needed =
                 AUTOPOOL_TARGET - alreadyEarned;
 
-            // Calculate payment
             uint256 payout = remaining < needed
                 ? remaining
                 : needed;
 
-            // Update accounting before token transfer
+            // Update accounting
             earning[recipient].autoPoolEarnings += payout;
 
             remaining -= payout;
@@ -388,7 +420,6 @@ contract PVCReferralSystem is Ownable, ReentrancyGuard {
                 completed
             );
 
-            // Move to next user after completing target
             if (completed) {
 
                 autoPoolCompleted[recipient] = true;
@@ -403,9 +434,9 @@ contract PVCReferralSystem is Ownable, ReentrancyGuard {
         }
     }
 
-    // =================================================
+    // ============================================================
     // ADMIN WITHDRAWAL
-    // =================================================
+    // ============================================================
 
     function withdrawAdminReserve(
         address recipient,
@@ -443,9 +474,9 @@ contract PVCReferralSystem is Ownable, ReentrancyGuard {
         );
     }
 
-    // =================================================
+    // ============================================================
     // USER VIEWS
-    // =================================================
+    // ============================================================
 
     function getUserUpline(address user)
         external
@@ -476,7 +507,7 @@ contract PVCReferralSystem is Ownable, ReentrancyGuard {
             uint256 autoPool
         )
     {
-        Earning memory e = earning[user];
+        Earning storage e = earning[user];
 
         return (
             e.directEarnings,
@@ -501,9 +532,9 @@ contract PVCReferralSystem is Ownable, ReentrancyGuard {
         );
     }
 
-    // =================================================
+    // ============================================================
     // AUTOPOOL QUEUE VIEWS
-    // =================================================
+    // ============================================================
 
     function getCurrentAutoPoolRecipient()
         external
@@ -533,24 +564,30 @@ contract PVCReferralSystem is Ownable, ReentrancyGuard {
         view
         returns (address[] memory result)
     {
-        uint256 end = start + count;
+        uint256 total = autoPoolQueue.length;
 
-        if (end > autoPoolQueue.length) {
-            end = autoPoolQueue.length;
+        if (start >= total || count == 0) {
+            return new address[](0);
         }
 
-        require(start <= end, "Invalid start");
+        uint256 remaining = total - start;
 
-        result = new address[](end - start);
+        uint256 resultLength = count < remaining
+            ? count
+            : remaining;
+
+        uint256 end = start + resultLength;
+
+        result = new address[](resultLength);
 
         for (uint256 i = start; i < end; i++) {
             result[i - start] = autoPoolQueue[i];
         }
     }
 
-    // =================================================
+    // ============================================================
     // CONFIGURATION VIEW
-    // =================================================
+    // ============================================================
 
     function getTokenConfiguration()
         external
@@ -565,5 +602,170 @@ contract PVCReferralSystem is Ownable, ReentrancyGuard {
         config.maxLevels = MAX_LEVELS;
         config.autoPoolContribution = AUTOPOOL_CONTRIBUTION;
         config.autoPoolTarget = AUTOPOOL_TARGET;
+    }
+
+    // ============================================================
+    // DIRECT REFERRAL VIEWS
+    // ============================================================
+
+    function getDirectReferralCount(address user)
+        external
+        view
+        returns (uint256)
+    {
+        return directReferrals[user].length;
+    }
+
+    function getDirectReferralAddresses(address user)
+        external
+        view
+        returns (address[] memory)
+    {
+        return directReferrals[user];
+    }
+
+    function getDirectReferrals(
+        address user,
+        uint256 offset,
+        uint256 limit
+    )
+        external
+        view
+        returns (MemberDetails[] memory result)
+    {
+        require(limit <= 100, "Limit too high");
+
+        uint256 total = directReferrals[user].length;
+
+        if (offset >= total || limit == 0) {
+            return new MemberDetails[](0);
+        }
+
+        uint256 remaining = total - offset;
+
+        uint256 resultLength = limit < remaining
+            ? limit
+            : remaining;
+
+        uint256 end = offset + resultLength;
+
+        result = new MemberDetails[](resultLength);
+
+        for (uint256 i = offset; i < end; i++) {
+            address member = directReferrals[user][i];
+
+            UserInfo storage info = userInfo[member];
+
+            result[i - offset] = MemberDetails({
+                wallet: member,
+                fullName: info.fullName,
+                email: info.email,
+                mobile: info.mobile,
+                joinedAt: info.joinedAt,
+                joined: info.joined
+            });
+        }
+    }
+
+    // ============================================================
+    // LEVEL REWARD VIEWS
+    // ============================================================
+
+    function getLevelMemberCount(
+        address user,
+        uint256 level
+    )
+        external
+        view
+        returns (uint256)
+    {
+        require(
+            level >= 1 && level <= MAX_LEVELS,
+            "Invalid level"
+        );
+
+        return levelMembers[user][level].length;
+    }
+
+    function getLevelEarnings(
+        address user,
+        uint256 level
+    )
+        external
+        view
+        returns (uint256)
+    {
+        require(
+            level >= 1 && level <= MAX_LEVELS,
+            "Invalid level"
+        );
+
+        return levelEarningsByLevel[user][level];
+    }
+
+    function getLevelMembers(
+        address user,
+        uint256 level,
+        uint256 offset,
+        uint256 limit
+    )
+        external
+        view
+        returns (MemberDetails[] memory result)
+    {
+        require(
+            level >= 1 && level <= MAX_LEVELS,
+            "Invalid level"
+        );
+
+        require(limit <= 100, "Limit too high");
+
+        uint256 total = levelMembers[user][level].length;
+
+        if (offset >= total || limit == 0) {
+            return new MemberDetails[](0);
+        }
+
+        uint256 remaining = total - offset;
+
+        uint256 resultLength = limit < remaining
+            ? limit
+            : remaining;
+
+        uint256 end = offset + resultLength;
+
+        result = new MemberDetails[](resultLength);
+
+        for (uint256 i = offset; i < end; i++) {
+            address member = levelMembers[user][level][i];
+
+            UserInfo storage info = userInfo[member];
+
+            result[i - offset] = MemberDetails({
+                wallet: member,
+                fullName: info.fullName,
+                email: info.email,
+                mobile: info.mobile,
+                joinedAt: info.joinedAt,
+                joined: info.joined
+            });
+        }
+    }
+
+    function getLevelSummary(address user)
+        external
+        view
+        returns (
+            uint256[10] memory earnings,
+            uint256[10] memory memberCounts
+        )
+    {
+        for (uint256 i = 0; i < MAX_LEVELS; i++) {
+            uint256 level = i + 1;
+
+            earnings[i] = levelEarningsByLevel[user][level];
+
+            memberCounts[i] = levelMembers[user][level].length;
+        }
     }
 }
