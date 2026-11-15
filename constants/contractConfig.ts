@@ -2,25 +2,26 @@ export const CONTRACT_CONSTANTS = {
   TOKEN_SYMBOL: "PVC",
   TOKEN_DECIMALS: 18,
 
-  TOKEN_CONTRACT_ADDRESS: "0x4aE0f8058e0307314255F0C579Af59bD1995529f",
-  CONTRACT_ADDRESS: "0x94F4F735c97b401F377946879F0c6e488C7E73eC",
-  ROOT_ADDRESS: "0x94F4F735c97b401F377946879F0c6e488C7E73eC",
+  TOKEN_CONTRACT_ADDRESS: "0xb2d59dCE908907e94A4d3C911402131968B87777",
+  CONTRACT_ADDRESS: "0xa7cAC7c3391eea396b15609a2407C66AbCD12459",
+  ROOT_ADDRESS: "0xa7cAC7c3391eea396b15609a2407C66AbCD12459",
 
-  BSC_TESTNET: {
-    chainId: 97,
-    chainIdHex: "0x61",
-    chainName: "BNB Smart Chain Testnet",
+  BSC_MAINNET: {
+    chainId: 56,
+    chainIdHex: "0x38",
+    chainName: "BNB Smart Chain",
     nativeCurrency: {
-      name: "Binance Chain Native Token",
-      symbol: "tBNB",
+      name: "BNB",
+      symbol: "BNB",
       decimals: 18,
     },
     rpcUrls: [
-      "https://bsc-testnet.publicnode.com",
-      "https://bsc-testnet-dataseed.bnbchain.org",
-      "https://data-seed-prebsc-1-s1.binance.org:8545/",
+      "https://bsc-dataseed-public.bnbchain.org",
+      "https://bsc-dataseed.binance.org",
+      "https://bsc-dataseed1.binance.org",
+      "https://bsc.publicnode.com",
     ],
-    blockExplorerUrls: ["https://testnet.bscscan.com"],
+    blockExplorerUrls: ["https://bscscan.com"],
   },
 
   // Production amounts (fallback until getTokenConfiguration loads)

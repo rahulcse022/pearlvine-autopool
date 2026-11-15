@@ -1,6 +1,7 @@
 "use client";
 
 import { formatAddress } from "@/utils/formatAddress";
+import { getBscAddressUrl } from "@/utils/explorer";
 
 interface CurrentAutoPoolRecipientProps {
   name: string;
@@ -50,7 +51,7 @@ export default function CurrentAutoPoolRecipient({
           </p>
         </div>
         <a
-          href={`https://testnet.bscscan.com/address/${address}`}
+          href={getBscAddressUrl(address)}
           target="_blank"
           rel="noreferrer"
           title="View on BscScan"

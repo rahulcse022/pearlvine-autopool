@@ -2,6 +2,7 @@
 
 import { usePearlvine } from "@/context/PearlvineContext";
 import { formatAddress } from "@/utils/formatAddress";
+import { getBscAddressUrl } from "@/utils/explorer";
 import MetricCard from "@/components/common/MetricCard";
 
 export default function LevelIncomeSection() {
@@ -116,7 +117,7 @@ export default function LevelIncomeSection() {
                     <td className="table-cell-nowrap p-3 text-slate-600">{row.mobile || "—"}</td>
                     <td className="table-cell-nowrap p-3 font-mono text-slate-800" title={row.address}>
                       <a
-                        href={`https://testnet.bscscan.com/address/${row.address}`}
+                        href={getBscAddressUrl(row.address)}
                         target="_blank"
                         rel="noreferrer"
                         className="text-blue-600 hover:underline"

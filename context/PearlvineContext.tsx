@@ -28,7 +28,7 @@ import { CONTRACT_CONSTANTS } from "@/constants/contractConfig";
 import { APP_PATHS, pathToTab, tabToPath } from "@/constants/routes";
 import {
   getBrowserProvider,
-  switchToBscTestnet,
+  switchToBscMainnet,
   createAuthChallenge,
   signAuthChallenge,
   fetchLiveBlockchainState,
@@ -362,8 +362,8 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
       const currentChainId = Number(network.chainId);
       setChainId(currentChainId);
 
-      if (currentChainId !== CONTRACT_CONSTANTS.BSC_TESTNET.chainId) {
-        await switchToBscTestnet();
+      if (currentChainId !== CONTRACT_CONSTANTS.BSC_MAINNET.chainId) {
+        await switchToBscMainnet();
         const updatedNet = await browserProvider.getNetwork();
         setChainId(Number(updatedNet.chainId));
       }
@@ -398,7 +398,7 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
         return false;
       }
 
-      await switchToBscTestnet();
+      await switchToBscMainnet();
       let signer: ethers.Signer;
       try {
         signer = await browserProvider.getSigner();
@@ -475,7 +475,7 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
         return false;
       }
 
-      await switchToBscTestnet();
+      await switchToBscMainnet();
       let signer: ethers.Signer;
       try {
         signer = await browserProvider.getSigner();

@@ -66,9 +66,9 @@ declare global {
 }
 
 export function getReadProvider(): ethers.JsonRpcProvider {
-  return new ethers.JsonRpcProvider(CONTRACT_CONSTANTS.BSC_TESTNET.rpcUrls[0], {
-    name: CONTRACT_CONSTANTS.BSC_TESTNET.chainName,
-    chainId: CONTRACT_CONSTANTS.BSC_TESTNET.chainId,
+  return new ethers.JsonRpcProvider(CONTRACT_CONSTANTS.BSC_MAINNET.rpcUrls[0], {
+    name: CONTRACT_CONSTANTS.BSC_MAINNET.chainName,
+    chainId: CONTRACT_CONSTANTS.BSC_MAINNET.chainId,
   });
 }
 
@@ -79,15 +79,17 @@ export function getBrowserProvider(): ethers.BrowserProvider | null {
   return null;
 }
 
-export async function switchToBscTestnet(): Promise<boolean> {
+export async function switchToBscMainnet(): Promise<boolean> {
   if (typeof window === "undefined" || !window.ethereum) {
     throw new Error("No Web3 wallet found. Please install MetaMask.");
   }
 
+  const network = CONTRACT_CONSTANTS.BSC_MAINNET;
+
   try {
     await window.ethereum.request({
       method: "wallet_switchEthereumChain",
-      params: [{ chainId: CONTRACT_CONSTANTS.BSC_TESTNET.chainIdHex }],
+      params: [{ chainId: network.chainIdHex }],
     });
     return true;
   } catch (switchError: unknown) {
@@ -97,11 +99,11 @@ export async function switchToBscTestnet(): Promise<boolean> {
         method: "wallet_addEthereumChain",
         params: [
           {
-            chainId: CONTRACT_CONSTANTS.BSC_TESTNET.chainIdHex,
-            chainName: CONTRACT_CONSTANTS.BSC_TESTNET.chainName,
-            nativeCurrency: CONTRACT_CONSTANTS.BSC_TESTNET.nativeCurrency,
-            rpcUrls: CONTRACT_CONSTANTS.BSC_TESTNET.rpcUrls,
-            blockExplorerUrls: CONTRACT_CONSTANTS.BSC_TESTNET.blockExplorerUrls,
+            chainId: network.chainIdHex,
+            chainName: network.chainName,
+            nativeCurrency: network.nativeCurrency,
+            rpcUrls: [...network.rpcUrls],
+            blockExplorerUrls: [...network.blockExplorerUrls],
           },
         ],
       });

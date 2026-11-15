@@ -2,6 +2,7 @@
 
 import { usePearlvine } from "@/context/PearlvineContext";
 import { formatAddress } from "@/utils/formatAddress";
+import { getBscAddressUrl } from "@/utils/explorer";
 
 export default function LoginForm() {
   const {
@@ -59,7 +60,7 @@ export default function LoginForm() {
             <div className="flex justify-between items-center gap-3">
               <span>Referral Contract</span>
               <a
-                href={`https://testnet.bscscan.com/address/${contractAddress}`}
+                href={getBscAddressUrl(contractAddress)}
                 target="_blank"
                 rel="noreferrer"
                 className="font-mono text-blue-600 hover:underline font-semibold"
@@ -70,7 +71,7 @@ export default function LoginForm() {
             <div className="flex justify-between items-center gap-3">
               <span>PVC Token</span>
               <a
-                href={`https://testnet.bscscan.com/address/${tokenContractAddress}`}
+                href={getBscAddressUrl(tokenContractAddress)}
                 target="_blank"
                 rel="noreferrer"
                 className="font-mono text-blue-600 hover:underline font-semibold"

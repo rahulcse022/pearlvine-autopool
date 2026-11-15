@@ -2,6 +2,7 @@
 
 import { usePearlvine } from "@/context/PearlvineContext";
 import { formatAddress } from "@/utils/formatAddress";
+import { getBscAddressUrl } from "@/utils/explorer";
 import { APP_PATHS } from "@/constants/routes";
 import MetricCard from "@/components/common/MetricCard";
 import CurrentAutoPoolRecipient from "@/components/common/CurrentAutoPoolRecipient";
@@ -96,9 +97,7 @@ export default function DashboardOverview() {
               fullValue={user.walletAddress}
               onCopy={() => copyAddress(user.walletAddress, "Wallet")}
               explorerUrl={
-                user.walletAddress
-                  ? `https://testnet.bscscan.com/address/${user.walletAddress}`
-                  : undefined
+                user.walletAddress ? getBscAddressUrl(user.walletAddress) : undefined
               }
             />
             <DetailRow
@@ -117,9 +116,7 @@ export default function DashboardOverview() {
               fullValue={user.referrerAddress}
               onCopy={() => copyAddress(user.referrerAddress, "Sponsor")}
               explorerUrl={
-                user.referrerAddress
-                  ? `https://testnet.bscscan.com/address/${user.referrerAddress}`
-                  : undefined
+                user.referrerAddress ? getBscAddressUrl(user.referrerAddress) : undefined
               }
             />
           </div>
@@ -293,7 +290,7 @@ function DetailRow({
               href={explorerUrl}
               target="_blank"
               rel="noreferrer"
-              title="View on BscScan Testnet"
+              title="View on BscScan"
               className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
             >
               <i className="fa-solid fa-arrow-up-right-from-square text-[11px]"></i>

@@ -6,6 +6,7 @@ import { usePearlvine } from "@/context/PearlvineContext";
 import { DASHBOARD_NAV_ITEMS } from "@/constants/dashboardNav";
 import { UserPaneType } from "@/types";
 import { formatAddress } from "@/utils/formatAddress";
+import { getBscAddressUrl } from "@/utils/explorer";
 
 export default function Navbar() {
   const { isWeb3Connected, disconnectWallet, user, userPane, setUserPane, setActiveTab } =
@@ -239,11 +240,11 @@ function SignedInActions({
   return (
     <div className="flex items-center space-x-2">
       <a
-        href={`https://testnet.bscscan.com/address/${userAddress}`}
+        href={getBscAddressUrl(userAddress)}
         target="_blank"
         rel="noreferrer"
         className="bg-slate-800/80 hover:bg-slate-800 border border-slate-700 text-cyan-300 text-xs font-mono font-bold px-3 py-1.5 rounded-xl transition flex items-center gap-1.5"
-        title="View Wallet on BscScan Testnet"
+        title="View Wallet on BscScan"
       >
         <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
         <span>{formatAddress(userAddress)}</span>

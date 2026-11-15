@@ -2,6 +2,7 @@
 
 import { usePearlvine } from "@/context/PearlvineContext";
 import { formatAddress } from "@/utils/formatAddress";
+import { getBscAddressUrl } from "@/utils/explorer";
 import { APP_PATHS } from "@/constants/routes";
 import MetricCard from "@/components/common/MetricCard";
 
@@ -99,7 +100,7 @@ export default function ReferralsSection() {
                   <td className="table-cell-nowrap p-3 text-slate-600">{ref.mobile || "—"}</td>
                   <td className="table-cell-nowrap p-3 font-mono text-slate-800" title={ref.address}>
                     <a
-                      href={`https://testnet.bscscan.com/address/${ref.address}`}
+                      href={getBscAddressUrl(ref.address)}
                       target="_blank"
                       rel="noreferrer"
                       className="text-blue-600 hover:underline"

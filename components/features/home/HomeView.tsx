@@ -3,6 +3,7 @@
 import React, { useRef } from "react";
 import { usePearlvine } from "@/context/PearlvineContext";
 import { formatAddress } from "@/utils/formatAddress";
+import { getBscAddressUrl } from "@/utils/explorer";
 
 export default function HomeView() {
   const { setActiveTab, isWeb3Connected, setUserPane, tokenConfig, contractAddress } =
@@ -36,7 +37,7 @@ export default function HomeView() {
         <div className="absolute inset-0 opacity-40 bg-[radial-gradient(#93c5fd_1px,transparent_1px)] [background-size:24px_24px]"></div>
         <div className="max-w-4xl mx-auto relative z-10 space-y-6">
           <a
-            href={`https://testnet.bscscan.com/address/${contractAddress}`}
+            href={getBscAddressUrl(contractAddress)}
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-2 bg-white hover:bg-blue-50 text-blue-600 text-xs font-semibold px-4 py-1.5 rounded-full border border-blue-200 shadow-sm transition"
