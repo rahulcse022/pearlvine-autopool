@@ -75,9 +75,11 @@ function createRpcProvider(rpcUrl: string): ethers.JsonRpcProvider {
 
 /** Public RPC reader with fallbacks (used when wallet is not available). */
 export function getReadProvider(): ethers.AbstractProvider {
-  const urls = CONTRACT_CONSTANTS.BSC_MAINNET.rpcUrls;
-  if (urls.length === 1) {
-    return createRpcProvider(urls[0]);
+  // Widen away from `as const` tuple length so runtime length checks type-check.
+  const urls: readonly string[] = CONTRACT_CONSTANTS.BSC_MAINNET.rpcUrls;
+
+  if (urls.length <= 1) {
+    return createRpcProvider(urls[0] ?? CONTRACT_CONSTANTS.BSC_MAINNET.rpcUrls[0]);
   }
 
   return new ethers.FallbackProvider(
