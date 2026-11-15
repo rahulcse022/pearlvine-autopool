@@ -52,10 +52,9 @@ export default function Navbar() {
               <Image
                 src="/full_logo.png"
                 alt="Pearlvine International"
-                width={130}
-                height={34}
-                style={{ width: "auto" }}
-                className="h-7 sm:h-8 object-contain"
+                width={220}
+                height={40}
+                className="h-auto w-[10rem] sm:w-[13rem] object-contain"
                 priority
               />
             </div>

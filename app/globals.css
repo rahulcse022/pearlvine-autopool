@@ -71,6 +71,12 @@ body {
   }
 }
 
+/* Dashboard data tables: keep each field on one line; container scrolls horizontally */
+.table-cell-nowrap {
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;

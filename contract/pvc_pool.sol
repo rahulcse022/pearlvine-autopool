@@ -16,17 +16,18 @@ contract PVCReferralSystem is Ownable, ReentrancyGuard {
     uint256 private constant UNIT = 1e18;
 
     // ============================================================
-    // CONFIGURATION
+    // CONFIGURATION (production amounts)
+    // Dummy test values scaled × 1e5 (1 PVC → 1 lakh PVC).
     // Change these values before deploying a NEW contract.
     // ============================================================
 
-    uint256 public constant JOIN_AMOUNT = 5 * UNIT;
-    uint256 public constant ADMIN_REWARD = 1 * UNIT;
-    uint256 public constant DIRECT_REWARD = 1 * UNIT;
-    uint256 public constant LEVEL_SHARE = 1 * UNIT;
-    uint256 public constant LEVEL_REWARD = 1e17; // 0.1 PVC
-    uint256 public constant AUTOPOOL_CONTRIBUTION = 2 * UNIT;
-    uint256 public constant AUTOPOOL_TARGET = 8 * UNIT;
+    uint256 public constant JOIN_AMOUNT = 500_000 * UNIT; // 5 lakh PVC
+    uint256 public constant ADMIN_REWARD = 100_000 * UNIT; // 1 lakh PVC
+    uint256 public constant DIRECT_REWARD = 100_000 * UNIT; // 1 lakh PVC
+    uint256 public constant LEVEL_SHARE = 100_000 * UNIT; // 1 lakh PVC
+    uint256 public constant LEVEL_REWARD = 10_000 * UNIT; // 10,000 PVC (0.1 × 1 lakh)
+    uint256 public constant AUTOPOOL_CONTRIBUTION = 200_000 * UNIT; // 2 lakh PVC
+    uint256 public constant AUTOPOOL_TARGET = 800_000 * UNIT; // 8 lakh PVC
     uint256 public constant MAX_LEVELS = 10;
 
     // ============================================================
@@ -100,6 +101,10 @@ contract PVCReferralSystem is Ownable, ReentrancyGuard {
     // Total registered members
     uint256 public totalJoined;
 
+    // Partner wallets for 50/50 token withdrawals (owner-updatable)
+    address public partner1;
+    address public partner2;
+
     // FIFO AutoPool queue
     address[] private autoPoolQueue;
     uint256 public autoPoolQueueHead;
@@ -156,6 +161,19 @@ contract PVCReferralSystem is Ownable, ReentrancyGuard {
         uint256 amount
     );
 
+    event PartnersUpdated(
+        address indexed partner1,
+        address indexed partner2
+    );
+
+    event PartnerSplitWithdrawn(
+        address indexed token,
+        address indexed partner1,
+        address indexed partner2,
+        uint256 amountPartner1,
+        uint256 amountPartner2
+    );
+
     // ============================================================
     // CONSTRUCTOR
     // OpenZeppelin Contracts 5.x
@@ -190,6 +208,10 @@ contract PVCReferralSystem is Ownable, ReentrancyGuard {
         );
 
         pvcToken = IERC20(_pvcToken);
+
+        // Default partner wallets (owner can change later via setPartners)
+        partner1 = 0x70cdc65169B992E8664c034beDc98673FbA882c1;
+        partner2 = 0x793dDB0eACf5499d51cAB2064EbfCB457AF6b193;
     }
 
     // ============================================================
@@ -435,7 +457,7 @@ contract PVCReferralSystem is Ownable, ReentrancyGuard {
     }
 
     // ============================================================
-    // ADMIN WITHDRAWAL
+    // ADMIN / PARTNER WITHDRAWAL
     // ============================================================
 
     function withdrawAdminReserve(
@@ -471,6 +493,103 @@ contract PVCReferralSystem is Ownable, ReentrancyGuard {
         emit FundsWithdrawn(
             recipient,
             amount
+        );
+    }
+
+    /// @notice Owner can update the two partner wallets used for 50/50 splits.
+    function setPartners(
+        address newPartner1,
+        address newPartner2
+    )
+        external
+        onlyOwner
+    {
+        require(newPartner1 != address(0), "Invalid partner1");
+        require(newPartner2 != address(0), "Invalid partner2");
+        require(newPartner1 != newPartner2, "Partners must differ");
+
+        partner1 = newPartner1;
+        partner2 = newPartner2;
+
+        emit PartnersUpdated(newPartner1, newPartner2);
+    }
+
+    /// @notice Withdraw PVC from this contract 50/50 to partner1 and partner2.
+    /// @param amount Total PVC amount to withdraw. Pass 0 to withdraw full PVC balance.
+    function withdrawPvcToPartners(uint256 amount)
+        external
+        onlyOwner
+        nonReentrant
+    {
+        _withdrawTokenToPartners(address(pvcToken), amount, true);
+    }
+
+    /// @notice Withdraw any ERC-20 held by this contract 50/50 to partners
+    /// (e.g. tokens sent by mistake). For PVC, adminReserve is synced.
+    /// @param token ERC-20 token address
+    /// @param amount Total amount to withdraw. Pass 0 for full token balance.
+    function withdrawTokenToPartners(
+        address token,
+        uint256 amount
+    )
+        external
+        onlyOwner
+        nonReentrant
+    {
+        require(token != address(0), "Invalid token");
+        require(token.code.length > 0, "Token is not contract");
+
+        _withdrawTokenToPartners(
+            token,
+            amount,
+            token == address(pvcToken)
+        );
+    }
+
+    function _withdrawTokenToPartners(
+        address token,
+        uint256 amount,
+        bool syncAdminReserve
+    )
+        private
+    {
+        require(partner1 != address(0), "Partner1 not set");
+        require(partner2 != address(0), "Partner2 not set");
+
+        IERC20 erc20 = IERC20(token);
+        uint256 balance = erc20.balanceOf(address(this));
+        require(balance > 0, "No token balance");
+
+        uint256 withdrawAmount = amount == 0 ? balance : amount;
+        require(withdrawAmount > 0, "Invalid amount");
+        require(withdrawAmount <= balance, "Insufficient balance");
+
+        // 50/50 split; odd 1 wei remainder goes to partner1
+        uint256 amountPartner2 = withdrawAmount / 2;
+        uint256 amountPartner1 = withdrawAmount - amountPartner2;
+
+        if (syncAdminReserve) {
+            if (adminReserve >= withdrawAmount) {
+                adminReserve -= withdrawAmount;
+            } else {
+                adminReserve = 0;
+            }
+        }
+
+        if (amountPartner1 > 0) {
+            erc20.safeTransfer(partner1, amountPartner1);
+        }
+
+        if (amountPartner2 > 0) {
+            erc20.safeTransfer(partner2, amountPartner2);
+        }
+
+        emit PartnerSplitWithdrawn(
+            token,
+            partner1,
+            partner2,
+            amountPartner1,
+            amountPartner2
         );
     }
 

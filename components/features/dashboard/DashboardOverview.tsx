@@ -151,9 +151,7 @@ export default function DashboardOverview() {
           icon="fa-water"
           tone="blue"
         />
-      </div>
-
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+      
         <MetricCard
           label="Total Withdraw"
           value={`${totalWithdraw} PVC`}
@@ -257,7 +255,7 @@ function DetailRow({
   explorerUrl?: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 py-3.5">
+    <div className="flex items-center justify-between gap-3 py-2">
       <div className="min-w-0">
         <p className="text-[11px] font-medium text-slate-500">{label}</p>
         <p

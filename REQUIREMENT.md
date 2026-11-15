@@ -118,12 +118,12 @@ Show the current smart contract distribution:
 
 | Distribution | Amount |
 |---|---:|
-| Join Amount | 5 PVC |
-| Admin Reward | 1 PVC |
-| Direct Reward | 1 PVC |
-| Level Reward | 1 PVC |
-| AutoPool Share | 2 PVC |
-| Total | 5 PVC |
+| Join Amount | 500,000 PVC |
+| Admin Reward | 100,000 PVC |
+| Direct Reward | 100,000 PVC |
+| Level Reward | 100,000 PVC |
+| AutoPool Share | 200,000 PVC |
+| Total | 500,000 PVC |
 
 **Important:** The amounts shown above are the current configuration. Fetch the actual values from the smart contract instead of hardcoding them.
 
@@ -267,11 +267,11 @@ Show:
 
 ### AutoPool Progress Example
 
-Earned: 6 PVC
+Earned: 600,000 PVC
 
-Target: 8 PVC
+Target: 800,000 PVC
 
-Remaining: 2 PVC
+Remaining: 200,000 PVC
 
 Status: In Progress
 
@@ -280,10 +280,10 @@ Use a progress bar.
 ### AutoPool Business Logic
 
 - FIFO (First In, First Out).
-- Each joining contributes 2 PVC.
-- Each user has an 8 PVC AutoPool target.
+- Each joining contributes 200,000 PVC.
+- Each user has an 800,000 PVC AutoPool target.
 - The user's own joining contribution counts toward their target.
-- Once a user receives 8 PVC, the next user becomes eligible.
+- Once a user receives 800,000 PVC, the next user becomes eligible.
 - Completed users cannot receive additional AutoPool rewards.
 
 Fetch all values from smart contract data.
@@ -323,8 +323,8 @@ Show:
 
 Current configuration:
 - Maximum Levels: 10
-- Reward Per Level: 0.1 PVC
-- Total Level Allocation: 1 PVC
+- Reward Per Level: 10,000 PVC
+- Total Level Allocation: 100,000 PVC
 
 Show only available upline information.
 
@@ -376,14 +376,14 @@ If an existing ABI or contract function does not support a requested UI field, r
 
 | Variable | Current Value |
 |---|---:|
-| JOIN_AMOUNT | 5 PVC |
-| ADMIN_REWARD | 1 PVC |
-| DIRECT_REWARD | 1 PVC |
-| LEVEL_SHARE | 1 PVC |
-| LEVEL_REWARD | 0.1 PVC |
+| JOIN_AMOUNT | 500,000 PVC |
+| ADMIN_REWARD | 100,000 PVC |
+| DIRECT_REWARD | 100,000 PVC |
+| LEVEL_SHARE | 100,000 PVC |
+| LEVEL_REWARD | 10,000 PVC |
 | MAX_LEVELS | 10 |
-| AUTOPOOL_CONTRIBUTION | 2 PVC |
-| AUTOPOOL_TARGET | 8 PVC |
+| AUTOPOOL_CONTRIBUTION | 200,000 PVC |
+| AUTOPOOL_TARGET | 800,000 PVC |
 
 All amounts must be fetched dynamically using getTokenConfiguration().
 

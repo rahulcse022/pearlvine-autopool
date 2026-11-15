@@ -1,5 +1,12 @@
-const CACHE_NAME = "pearlvine-pwa-v1";
-const PRECACHE = ["/", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
+const CACHE_NAME = "pearlvine-pwa-v2";
+const PRECACHE = [
+  "/",
+  "/manifest.webmanifest",
+  "/icons/app-logo.png",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+  "/icons/apple-touch-icon.png",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

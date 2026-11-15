@@ -78,16 +78,16 @@ export default function LevelIncomeSection() {
           </span>
         </div>
         <div className="bg-white overflow-x-auto rounded-2xl border border-slate-200 shadow-sm">
-          <table className="w-full text-left border-collapse text-xs min-w-[700px]">
+          <table className="w-full text-left border-collapse text-xs min-w-[780px]">
             <thead>
               <tr className="bg-amber-50 text-amber-900 font-bold uppercase tracking-wider text-[11px]">
-                <th className="p-3">Name</th>
-                <th className="p-3">Email</th>
-                <th className="p-3">Mobile</th>
-                <th className="p-3">Wallet</th>
-                <th className="p-3">Level</th>
-                <th className="p-3">Joined</th>
-                <th className="p-3 rounded-r-lg">Status</th>
+                <th className="table-cell-nowrap p-3">Name</th>
+                <th className="table-cell-nowrap p-3">Email</th>
+                <th className="table-cell-nowrap p-3">Mobile</th>
+                <th className="table-cell-nowrap p-3">Wallet</th>
+                <th className="table-cell-nowrap p-3">Level</th>
+                <th className="table-cell-nowrap p-3">Joined</th>
+                <th className="table-cell-nowrap p-3 rounded-r-lg">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -104,10 +104,17 @@ export default function LevelIncomeSection() {
                     key={`${row.address}-${row.level}-${row.date}`}
                     className="hover:bg-amber-50/40 transition"
                   >
-                    <td className="p-3 font-semibold text-slate-800">{row.name || "—"}</td>
-                    <td className="p-3 text-slate-600 break-all">{row.email || "—"}</td>
-                    <td className="p-3 text-slate-600">{row.mobile || "—"}</td>
-                    <td className="p-3 font-mono text-slate-800" title={row.address}>
+                    <td className="table-cell-nowrap p-3 font-semibold text-slate-800">
+                      {row.name || "—"}
+                    </td>
+                    <td
+                      className="table-cell-nowrap p-3 text-slate-600"
+                      title={row.email || undefined}
+                    >
+                      {row.email || "—"}
+                    </td>
+                    <td className="table-cell-nowrap p-3 text-slate-600">{row.mobile || "—"}</td>
+                    <td className="table-cell-nowrap p-3 font-mono text-slate-800" title={row.address}>
                       <a
                         href={`https://testnet.bscscan.com/address/${row.address}`}
                         target="_blank"
@@ -117,9 +124,9 @@ export default function LevelIncomeSection() {
                         {formatAddress(row.address, 6)}
                       </a>
                     </td>
-                    <td className="p-3 font-bold text-amber-700">L{row.level}</td>
-                    <td className="p-3 text-slate-500 whitespace-nowrap">{row.date || "—"}</td>
-                    <td className="p-3">
+                    <td className="table-cell-nowrap p-3 font-bold text-amber-700">L{row.level}</td>
+                    <td className="table-cell-nowrap p-3 text-slate-500">{row.date || "—"}</td>
+                    <td className="table-cell-nowrap p-3">
                       <span className="px-2.5 py-1 rounded-full font-bold text-[10px] bg-emerald-100 text-emerald-800">
                         {row.status}
                       </span>

@@ -69,15 +69,15 @@ export default function ReferralsSection() {
       </div>
 
       <div className="bg-white overflow-x-auto rounded-2xl border border-slate-200 shadow-sm">
-        <table className="w-full text-left border-collapse text-xs min-w-[640px]">
+        <table className="w-full text-left border-collapse text-xs min-w-[720px]">
           <thead>
             <tr className="bg-emerald-50 text-emerald-900 font-bold uppercase tracking-wider text-[11px]">
-              <th className="p-3">Name</th>
-              <th className="p-3">Email</th>
-              <th className="p-3">Mobile</th>
-              <th className="p-3">Wallet</th>
-              <th className="p-3">Joined</th>
-              <th className="p-3 rounded-r-lg">Status</th>
+              <th className="table-cell-nowrap p-3">Name</th>
+              <th className="table-cell-nowrap p-3">Email</th>
+              <th className="table-cell-nowrap p-3">Mobile</th>
+              <th className="table-cell-nowrap p-3">Wallet</th>
+              <th className="table-cell-nowrap p-3">Joined</th>
+              <th className="table-cell-nowrap p-3 rounded-r-lg">Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -90,10 +90,14 @@ export default function ReferralsSection() {
             ) : (
               referrals.map((ref) => (
                 <tr key={ref.address} className="hover:bg-emerald-50/40 transition">
-                  <td className="p-3 font-semibold text-slate-800">{ref.name || "—"}</td>
-                  <td className="p-3 text-slate-600 break-all">{ref.email || "—"}</td>
-                  <td className="p-3 text-slate-600">{ref.mobile || "—"}</td>
-                  <td className="p-3 font-mono text-slate-800" title={ref.address}>
+                  <td className="table-cell-nowrap p-3 font-semibold text-slate-800">
+                    {ref.name || "—"}
+                  </td>
+                  <td className="table-cell-nowrap p-3 text-slate-600" title={ref.email || undefined}>
+                    {ref.email || "—"}
+                  </td>
+                  <td className="table-cell-nowrap p-3 text-slate-600">{ref.mobile || "—"}</td>
+                  <td className="table-cell-nowrap p-3 font-mono text-slate-800" title={ref.address}>
                     <a
                       href={`https://testnet.bscscan.com/address/${ref.address}`}
                       target="_blank"
@@ -103,8 +107,8 @@ export default function ReferralsSection() {
                       {formatAddress(ref.address, 6)}
                     </a>
                   </td>
-                  <td className="p-3 text-slate-500 whitespace-nowrap">{ref.date || "—"}</td>
-                  <td className="p-3">
+                  <td className="table-cell-nowrap p-3 text-slate-500">{ref.date || "—"}</td>
+                  <td className="table-cell-nowrap p-3">
                     <span className="px-2.5 py-1 rounded-full font-bold text-[10px] bg-emerald-100 text-emerald-800">
                       {ref.status}
                     </span>
