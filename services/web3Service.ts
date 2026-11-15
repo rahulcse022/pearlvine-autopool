@@ -65,11 +65,30 @@ declare global {
   }
 }
 
-export function getReadProvider(): ethers.JsonRpcProvider {
-  return new ethers.JsonRpcProvider(CONTRACT_CONSTANTS.BSC_MAINNET.rpcUrls[0], {
-    name: CONTRACT_CONSTANTS.BSC_MAINNET.chainName,
-    chainId: CONTRACT_CONSTANTS.BSC_MAINNET.chainId,
+const BSC_NETWORK = ethers.Network.from(CONTRACT_CONSTANTS.BSC_MAINNET.chainId);
+
+function createRpcProvider(rpcUrl: string): ethers.JsonRpcProvider {
+  return new ethers.JsonRpcProvider(rpcUrl, BSC_NETWORK, {
+    staticNetwork: BSC_NETWORK,
   });
+}
+
+/** Public RPC reader with fallbacks (used when wallet is not available). */
+export function getReadProvider(): ethers.AbstractProvider {
+  const urls = CONTRACT_CONSTANTS.BSC_MAINNET.rpcUrls;
+  if (urls.length === 1) {
+    return createRpcProvider(urls[0]);
+  }
+
+  return new ethers.FallbackProvider(
+    urls.map((url, index) => ({
+      provider: createRpcProvider(url),
+      priority: index + 1,
+      stallTimeout: 2_500,
+      weight: 1,
+    })),
+    BSC_NETWORK
+  );
 }
 
 export function getBrowserProvider(): ethers.BrowserProvider | null {
@@ -77,6 +96,14 @@ export function getBrowserProvider(): ethers.BrowserProvider | null {
     return new ethers.BrowserProvider(window.ethereum as ethers.Eip1193Provider);
   }
   return null;
+}
+
+/**
+ * Prefer MetaMask/browser provider so balances match the wallet UI.
+ * Falls back to public RPCs when wallet is not connected.
+ */
+export function getPreferredProvider(): ethers.ContractRunner {
+  return getBrowserProvider() ?? getReadProvider();
 }
 
 export async function switchToBscMainnet(): Promise<boolean> {
@@ -150,17 +177,30 @@ function getReferralContract(runner: ethers.ContractRunner) {
   );
 }
 
-function getTokenContract(runner: ethers.ContractRunner) {
-  return new ethers.Contract(
-    CONTRACT_CONSTANTS.TOKEN_CONTRACT_ADDRESS,
-    ERC20_ABI,
-    runner
-  );
+function getTokenContract(
+  runner: ethers.ContractRunner,
+  tokenAddress: string = CONTRACT_CONSTANTS.TOKEN_CONTRACT_ADDRESS
+) {
+  return new ethers.Contract(tokenAddress, ERC20_ABI, runner);
+}
+
+async function resolvePvcTokenAddress(
+  runner: ethers.ContractRunner
+): Promise<string> {
+  try {
+    const onChain = (await getReferralContract(runner).pvcToken()) as string;
+    if (ethers.isAddress(onChain) && onChain !== ethers.ZeroAddress) {
+      return ethers.getAddress(onChain);
+    }
+  } catch {
+    // fall through to configured token address
+  }
+  return ethers.getAddress(CONTRACT_CONSTANTS.TOKEN_CONTRACT_ADDRESS);
 }
 
 export async function fetchTokenConfiguration(): Promise<TokenConfig> {
   try {
-    const contract = getReferralContract(getReadProvider());
+    const contract = getReferralContract(getPreferredProvider());
     const config = await contract.getTokenConfiguration();
     return {
       joinAmount: toPvc(config.joinAmount),
@@ -199,7 +239,7 @@ function mapMember(raw: MemberDetailsRaw) {
 
 export async function fetchDirectReferrals(sponsorAddress: string): Promise<ReferralItem[]> {
   try {
-    const contract = getReferralContract(getReadProvider());
+    const contract = getReferralContract(getPreferredProvider());
     const sponsor = ethers.getAddress(sponsorAddress);
     const rows = (await contract.getDirectReferrals(sponsor, 0, PAGE_LIMIT)) as MemberDetailsRaw[];
     return rows.map(mapMember).reverse();
@@ -237,7 +277,7 @@ export async function fetchUserPublicProfile(address: string): Promise<{
   if (!ethers.isAddress(address)) return null;
 
   const clean = ethers.getAddress(address);
-  const contract = getReferralContract(getReadProvider());
+  const contract = getReferralContract(getPreferredProvider());
   const [profile, hasJoined] = await Promise.all([
     fetchMemberProfile(contract, clean),
     contract.hasJoined(clean).catch(() => false),
@@ -256,7 +296,7 @@ export async function enrichUplineSlots(
   addresses: string[],
   levelReward: number
 ): Promise<UplineSlot[]> {
-  const contract = getReferralContract(getReadProvider());
+  const contract = getReferralContract(getPreferredProvider());
   return Promise.all(
     Array.from({ length: CONTRACT_CONSTANTS.MAX_LEVELS }, async (_, index) => {
       const raw = addresses[index];
@@ -291,7 +331,7 @@ export async function fetchLevelBoard(userAddress: string): Promise<{
   levelStats: LevelStat[];
   levelRewards: LevelRewardItem[];
 }> {
-  const contract = getReferralContract(getReadProvider());
+  const contract = getReferralContract(getPreferredProvider());
   const user = ethers.getAddress(userAddress);
   const emptyStats: LevelStat[] = Array.from(
     { length: CONTRACT_CONSTANTS.MAX_LEVELS },
@@ -349,10 +389,11 @@ export async function fetchLevelBoard(userAddress: string): Promise<{
 }
 
 export async function fetchLiveBlockchainState(userAddress: string) {
-  const provider = getReadProvider();
+  const provider = getPreferredProvider();
   const cleanAddress = ethers.getAddress(userAddress);
-  const tokenContract = getTokenContract(provider);
   const referralContract = getReferralContract(provider);
+  const pvcTokenAddress = await resolvePvcTokenAddress(provider);
+  const tokenContract = getTokenContract(provider, pvcTokenAddress);
 
   const [
     balanceRaw,
@@ -369,7 +410,10 @@ export async function fetchLiveBlockchainState(userAddress: string) {
     totalJoined,
     tokenConfig,
   ] = await Promise.all([
-    tokenContract.balanceOf(cleanAddress).catch(() => BigInt(0)),
+    tokenContract.balanceOf(cleanAddress).catch((err: unknown) => {
+      console.warn("PVC balanceOf failed:", err);
+      return BigInt(0);
+    }),
     tokenContract
       .allowance(cleanAddress, CONTRACT_CONSTANTS.CONTRACT_ADDRESS)
       .catch(() => BigInt(0)),
@@ -503,7 +547,8 @@ export async function executeApprovePvcToken(
   signer: ethers.Signer,
   amountPVC: number
 ): Promise<string> {
-  const tokenContract = getTokenContract(signer);
+  const pvcTokenAddress = await resolvePvcTokenAddress(signer);
+  const tokenContract = getTokenContract(signer, pvcTokenAddress);
   const amountWei = ethers.parseUnits(amountPVC.toString(), DECIMALS);
   const tx = await tokenContract.approve(CONTRACT_CONSTANTS.CONTRACT_ADDRESS, amountWei);
   const receipt = await tx.wait(1);
