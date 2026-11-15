@@ -7,9 +7,19 @@ import React, {
   useEffect,
   ReactNode,
   useCallback,
+  useRef,
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ethers } from "ethers";
+import {
+  useAppKit,
+  useAppKitAccount,
+  useAppKitNetwork,
+  useAppKitProvider,
+  useDisconnect,
+  type Provider,
+} from "@reown/appkit/react";
+import { bsc } from "@reown/appkit/networks";
 import {
   TabType,
   UserPaneType,
@@ -26,8 +36,11 @@ import {
 import { INITIAL_USER, DEFAULT_TOKEN_CONFIG, INITIAL_UPLINES } from "@/constants/mockData";
 import { CONTRACT_CONSTANTS } from "@/constants/contractConfig";
 import { APP_PATHS, pathToTab, tabToPath } from "@/constants/routes";
+import { appKitModal } from "@/context/AppKitProvider";
 import {
   getBrowserProvider,
+  getWalletChainId,
+  setActiveWalletProvider,
   switchToBscMainnet,
   createAuthChallenge,
   signAuthChallenge,
@@ -36,12 +49,35 @@ import {
   executeJoinAutoPool,
   resolveSponsorAddress,
   fetchTokenConfiguration,
+  fetchContractOwner,
+  executeWithdrawPvcToPartners,
+  type EthereumProvider,
 } from "@/services/web3Service";
 import {
   loadAuthSession,
   saveAuthSession,
   clearAuthSession,
 } from "@/utils/authSession";
+
+function waitForAppKitAddress(timeoutMs = 20_000): Promise<string | null> {
+  const existing = appKitModal.getAddress("eip155");
+  if (existing) return Promise.resolve(existing);
+
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      unsub();
+      resolve(appKitModal.getAddress("eip155") ?? null);
+    }, timeoutMs);
+
+    const unsub = appKitModal.subscribeAccount((state) => {
+      if (state.isConnected && state.address) {
+        clearTimeout(timer);
+        unsub();
+        resolve(state.address);
+      }
+    });
+  });
+}
 
 interface PearlvineContextType {
   activeTab: TabType;
@@ -67,6 +103,7 @@ interface PearlvineContextType {
   ) => void;
   closeModal: () => void;
   isWeb3Connected: boolean;
+  isAdmin: boolean;
   isConnecting: boolean;
   isSigning: boolean;
   isTransacting: boolean;
@@ -82,6 +119,7 @@ interface PearlvineContextType {
     sponsor: string
   ) => Promise<boolean>;
   syncBlockchainData: (address?: string) => Promise<void>;
+  withdrawPvcToPartners: (amountPVC: number) => Promise<boolean>;
 }
 
 const EMPTY_AUTO_POOL: AutoPoolStatus = {
@@ -113,6 +151,40 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const activeTab = pathToTab(pathname);
+  const { open } = useAppKit();
+  const { disconnect } = useDisconnect();
+  const { chainId: appKitChainId, switchNetwork } = useAppKitNetwork();
+  const { address: appKitAddress, isConnected: appKitConnected } = useAppKitAccount();
+  const { walletProvider } = useAppKitProvider<Provider>("eip155");
+  const sessionWalletRef = useRef<string>("");
+  const appKitAddressRef = useRef<string | undefined>(appKitAddress);
+  const switchingNetworkRef = useRef(false);
+
+  useEffect(() => {
+    appKitAddressRef.current = appKitAddress;
+  }, [appKitAddress]);
+
+  const bscChainId = CONTRACT_CONSTANTS.BSC_MAINNET.chainId;
+
+  const ensureBscNetwork = useCallback(async () => {
+    const current =
+      appKitChainId != null ? Number(appKitChainId) : await getWalletChainId();
+    if (current === bscChainId) {
+      setChainId(bscChainId);
+      return;
+    }
+
+    try {
+      await switchNetwork(bsc);
+      setChainId(bscChainId);
+      return;
+    } catch (appKitErr) {
+      console.warn("AppKit switchNetwork failed, trying wallet provider:", appKitErr);
+    }
+
+    await switchToBscMainnet();
+    setChainId(bscChainId);
+  }, [appKitChainId, bscChainId, switchNetwork]);
 
   const [userPane, setUserPaneState] = useState<UserPaneType>("main");
   const [user, setUser] = useState<UserProfile>(INITIAL_USER);
@@ -125,19 +197,57 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
   const [tokenConfig, setTokenConfig] = useState<TokenConfig>(DEFAULT_TOKEN_CONFIG);
 
   const [isWeb3Connected, setIsWeb3Connected] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [contractOwner, setContractOwner] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSigning, setIsSigning] = useState(false);
   const [isTransacting, setIsTransacting] = useState(false);
   const [chainId, setChainId] = useState<number | null>(null);
   const [signature, setSignature] = useState<DigitalSignature | undefined>();
-
   const [modal, setModal] = useState<ModalState>({
     isOpen: false,
     title: "Notification",
     message: "",
     type: "info",
   });
+
+  useEffect(() => {
+    setActiveWalletProvider(
+      walletProvider ? (walletProvider as unknown as EthereumProvider) : null
+    );
+  }, [walletProvider]);
+
+  useEffect(() => {
+    sessionWalletRef.current = user.walletAddress || "";
+  }, [user.walletAddress]);
+
+  // Auto-switch to BSC Mainnet whenever wallet is connected on another chain
+  useEffect(() => {
+    if (!appKitConnected) return;
+    if (appKitChainId == null) return;
+
+    const current = Number(appKitChainId);
+    setChainId(current);
+    if (current === bscChainId) return;
+    if (switchingNetworkRef.current) return;
+
+    switchingNetworkRef.current = true;
+    void ensureBscNetwork()
+      .catch((err: unknown) => {
+        const msg =
+          err instanceof Error ? err.message : "Failed to switch to BSC Mainnet.";
+        setModal({
+          isOpen: true,
+          title: "Wrong Network",
+          message: msg,
+          type: "warning",
+        });
+      })
+      .finally(() => {
+        switchingNetworkRef.current = false;
+      });
+  }, [appKitConnected, appKitChainId, bscChainId, ensureBscNetwork]);
 
   const setActiveTab = (tab: TabType) => {
     const nextPath = tabToPath(tab);
@@ -150,9 +260,40 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    let mounted = true;
+    void fetchContractOwner().then((owner) => {
+      if (mounted) setContractOwner(owner);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isWeb3Connected || !user.walletAddress || !contractOwner) {
+      setIsAdmin(false);
+      return;
+    }
+    try {
+      setIsAdmin(
+        ethers.getAddress(user.walletAddress) === ethers.getAddress(contractOwner)
+      );
+    } catch {
+      setIsAdmin(false);
+    }
+  }, [isWeb3Connected, user.walletAddress, contractOwner]);
+
+  useEffect(() => {
     if (!authReady) return;
-    if (!isWeb3Connected && pathname === APP_PATHS.dashboard) {
+    if (
+      !isWeb3Connected &&
+      (pathname === APP_PATHS.dashboard || pathname === APP_PATHS.admin)
+    ) {
       router.replace(APP_PATHS.login);
+      return;
+    }
+    if (isWeb3Connected && pathname === APP_PATHS.admin && contractOwner && !isAdmin) {
+      router.replace(APP_PATHS.dashboard);
       return;
     }
     if (
@@ -161,7 +302,7 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
     ) {
       router.replace(APP_PATHS.dashboard);
     }
-  }, [authReady, isWeb3Connected, pathname, router]);
+  }, [authReady, isWeb3Connected, isAdmin, contractOwner, pathname, router]);
 
   const setUserPane = (pane: UserPaneType) => {
     setUserPaneState(pane);
@@ -182,6 +323,7 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
   const resetLocalAuthState = useCallback(() => {
     clearAuthSession();
     setIsWeb3Connected(false);
+    setIsAdmin(false);
     setSignature(undefined);
     setUser(INITIAL_USER);
     setReferrals([]);
@@ -290,39 +432,39 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
     };
   }, [applyLiveState]);
 
-  // Auto-logout only when active MetaMask account changes away from session wallet
+  // Auto-logout when AppKit account disconnects or switches away from session wallet
   useEffect(() => {
-    if (!isWeb3Connected || !user.walletAddress) return;
-    const ethereum = window.ethereum;
-    if (!ethereum?.on) return;
+    if (!isWeb3Connected) return;
 
-    const sessionWallet = user.walletAddress;
+    const unsub = appKitModal.subscribeAccount((state) => {
+      const sessionWallet = sessionWalletRef.current;
+      if (!sessionWallet) return;
 
-    const onAccountsChanged = (accounts: unknown) => {
-      const list = Array.isArray(accounts) ? (accounts as string[]) : [];
-      const next = list[0];
-      if (!next) {
+      if (!state.isConnected || !state.address) {
         resetLocalAuthState();
         router.replace(APP_PATHS.login);
         return;
       }
 
-      if (ethers.getAddress(next) !== ethers.getAddress(sessionWallet)) {
-        resetLocalAuthState();
-        showModal(
-          "Wallet Changed",
-          "Active wallet changed. Please sign in again with the new wallet.",
-          "warning"
-        );
-        router.replace(APP_PATHS.login);
+      try {
+        if (ethers.getAddress(state.address) !== ethers.getAddress(sessionWallet)) {
+          resetLocalAuthState();
+          showModal(
+            "Wallet Changed",
+            "Active wallet changed. Please sign in again with the new wallet.",
+            "warning"
+          );
+          router.replace(APP_PATHS.login);
+        }
+      } catch {
+        // ignore invalid address during transient wallet updates
       }
-    };
+    });
 
-    ethereum.on("accountsChanged", onAccountsChanged);
     return () => {
-      ethereum.removeListener?.("accountsChanged", onAccountsChanged);
+      unsub();
     };
-  }, [isWeb3Connected, user.walletAddress, router, resetLocalAuthState]);
+  }, [isWeb3Connected, router, resetLocalAuthState]);
 
   const syncBlockchainData = useCallback(
     async (targetAddress?: string) => {
@@ -342,31 +484,36 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
   const connectWallet = async (): Promise<string | null> => {
     setIsConnecting(true);
     try {
-      const browserProvider = getBrowserProvider();
-      if (!browserProvider) {
+      let selectedAddress =
+        (appKitConnected && appKitAddress) ||
+        appKitModal.getAddress("eip155") ||
+        appKitAddressRef.current ||
+        null;
+
+      if (!selectedAddress) {
+        await open({ view: "Connect" });
+        // Modal close resolves first; brief wait covers provider hydration race.
+        selectedAddress =
+          appKitModal.getAddress("eip155") ||
+          appKitAddressRef.current ||
+          (await waitForAppKitAddress(4_000));
+      }
+
+      if (!selectedAddress) {
         showModal(
           "Wallet Required",
-          "Install MetaMask or another Web3 wallet to continue.",
+          "Connect Bitget, MetaMask, Trust Wallet, or SafePal to continue.",
           "warning"
         );
         return null;
       }
 
-      const accounts = await browserProvider.send("eth_requestAccounts", []);
-      if (!accounts?.length) {
-        throw new Error("No accounts authorized.");
-      }
+      const provider =
+        (walletProvider as unknown as EthereumProvider | undefined) ||
+        appKitModal.getProvider<EthereumProvider>("eip155");
+      if (provider) setActiveWalletProvider(provider);
 
-      const selectedAddress = accounts[0] as string;
-      const network = await browserProvider.getNetwork();
-      const currentChainId = Number(network.chainId);
-      setChainId(currentChainId);
-
-      if (currentChainId !== CONTRACT_CONSTANTS.BSC_MAINNET.chainId) {
-        await switchToBscMainnet();
-        const updatedNet = await browserProvider.getNetwork();
-        setChainId(Number(updatedNet.chainId));
-      }
+      await ensureBscNetwork();
 
       await syncBlockchainData(selectedAddress);
       setUser((prev) => ({ ...prev, walletAddress: selectedAddress }));
@@ -381,33 +528,55 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
   };
 
   const disconnectWallet = () => {
+    void disconnect().catch(() => undefined);
+    setActiveWalletProvider(null);
     resetLocalAuthState();
     router.replace(APP_PATHS.home);
+  };
+
+  const getConnectedSigner = async (): Promise<{
+    signer: ethers.Signer;
+    address: string;
+  } | null> => {
+    const connectedAddress = await connectWallet();
+    if (!connectedAddress) return null;
+
+    await ensureBscNetwork();
+
+    const providerFromKit =
+      (walletProvider as unknown as EthereumProvider | undefined) ||
+      appKitModal.getProvider<EthereumProvider>("eip155");
+    if (providerFromKit) setActiveWalletProvider(providerFromKit);
+
+    const browserProvider = getBrowserProvider();
+    if (!browserProvider) {
+      showModal(
+        "Wallet Required",
+        "Connect Bitget, MetaMask, Trust Wallet, or SafePal to continue.",
+        "warning"
+      );
+      return null;
+    }
+
+    let signer: ethers.Signer;
+    try {
+      signer = await browserProvider.getSigner();
+    } catch {
+      await browserProvider.send("eth_requestAccounts", []);
+      signer = await browserProvider.getSigner();
+    }
+
+    const signerAddress = await signer.getAddress();
+    return { signer, address: signerAddress };
   };
 
   const loginWithSignature = async (): Promise<boolean> => {
     setIsSigning(true);
     try {
-      const browserProvider = getBrowserProvider();
-      if (!browserProvider) {
-        showModal(
-          "Wallet Required",
-          "Install MetaMask or another Web3 wallet to sign in.",
-          "warning"
-        );
-        return false;
-      }
+      const ready = await getConnectedSigner();
+      if (!ready) return false;
 
-      await switchToBscMainnet();
-      let signer: ethers.Signer;
-      try {
-        signer = await browserProvider.getSigner();
-      } catch {
-        await browserProvider.send("eth_requestAccounts", []);
-        signer = await browserProvider.getSigner();
-      }
-
-      const signerAddress = await signer.getAddress();
+      const { signer, address: signerAddress } = ready;
       const live = await fetchLiveBlockchainState(signerAddress);
 
       if (!live.hasJoined) {
@@ -465,26 +634,10 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
     setIsSigning(true);
     setIsTransacting(true);
     try {
-      const browserProvider = getBrowserProvider();
-      if (!browserProvider) {
-        showModal(
-          "Wallet Required",
-          "Install MetaMask or another Web3 wallet to register.",
-          "warning"
-        );
-        return false;
-      }
+      const ready = await getConnectedSigner();
+      if (!ready) return false;
 
-      await switchToBscMainnet();
-      let signer: ethers.Signer;
-      try {
-        signer = await browserProvider.getSigner();
-      } catch {
-        await browserProvider.send("eth_requestAccounts", []);
-        signer = await browserProvider.getSigner();
-      }
-
-      const activeAddr = await signer.getAddress();
+      const { signer, address: activeAddr } = ready;
       const cleanSponsor = resolveSponsorAddress(sponsor);
 
       if (cleanSponsor.toLowerCase() === activeAddr.toLowerCase()) {
@@ -577,6 +730,42 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
     };
   }, [isWeb3Connected, user.walletAddress, syncBlockchainData]);
 
+  const withdrawPvcToPartners = async (amountPVC: number): Promise<boolean> => {
+    if (!isAdmin) {
+      showModal("Admin Only", "Only the contract owner can withdraw to partners.", "warning");
+      return false;
+    }
+    if (!(amountPVC > 0)) {
+      showModal("Invalid Amount", "Enter an amount greater than 0.", "warning");
+      return false;
+    }
+
+    setIsTransacting(true);
+    try {
+      const ready = await getConnectedSigner();
+      if (!ready) return false;
+
+      showModal(
+        "Withdraw to Partners",
+        `Confirm ${amountPVC} PVC split 50/50 to partner wallets.`,
+        "info"
+      );
+      await executeWithdrawPvcToPartners(ready.signer, amountPVC);
+      showModal(
+        "Withdrawn",
+        `${amountPVC} PVC sent 50/50 to Partner 1 and Partner 2.`,
+        "success"
+      );
+      return true;
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : "Withdraw failed.";
+      showModal("Withdraw Failed", errMsg, "warning");
+      return false;
+    } finally {
+      setIsTransacting(false);
+    }
+  };
+
   return (
     <PearlvineContext.Provider
       value={{
@@ -599,6 +788,7 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
         showModal,
         closeModal,
         isWeb3Connected,
+        isAdmin,
         isConnecting,
         isSigning,
         isTransacting,
@@ -609,6 +799,7 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
         loginWithSignature,
         registerWithSignature,
         syncBlockchainData,
+        withdrawPvcToPartners,
       }}
     >
       {children}

@@ -9,13 +9,21 @@ import { formatAddress } from "@/utils/formatAddress";
 import { getBscAddressUrl } from "@/utils/explorer";
 
 export default function Navbar() {
-  const { isWeb3Connected, disconnectWallet, user, userPane, setUserPane, setActiveTab } =
-    usePearlvine();
+  const {
+    isWeb3Connected,
+    isAdmin,
+    disconnectWallet,
+    user,
+    userPane,
+    setUserPane,
+    setActiveTab,
+    activeTab,
+  } = usePearlvine();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const closeDrawer = () => setDrawerOpen(false);
 
-  const goTo = (tab: "home" | "login" | "register" | "dashboard") => {
+  const goTo = (tab: "home" | "login" | "register" | "dashboard" | "admin") => {
     setActiveTab(tab);
     closeDrawer();
   };
@@ -124,7 +132,7 @@ export default function Navbar() {
           {isWeb3Connected ? (
             <>
               {DASHBOARD_NAV_ITEMS.map((item) => {
-                const isActive = userPane === item.pane;
+                const isActive = activeTab === "dashboard" && userPane === item.pane;
                 return (
                   <button
                     key={item.pane}
@@ -143,6 +151,24 @@ export default function Navbar() {
                   </button>
                 );
               })}
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => goTo("admin")}
+                  className={`w-full text-left flex items-center space-x-3 py-3 px-3 rounded-xl text-sm font-semibold transition ${
+                    activeTab === "admin"
+                      ? "light-drawer-item-active"
+                      : "light-drawer-item"
+                  }`}
+                >
+                  <i
+                    className={`fa-solid fa-shield-halved ${
+                      activeTab === "admin" ? "text-blue-600" : "text-violet-600"
+                    } w-5`}
+                  ></i>
+                  <span>Admin</span>
+                </button>
+              )}
             </>
           ) : (
             <>

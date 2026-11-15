@@ -4,6 +4,8 @@ const nextConfig: NextConfig = {
   experimental: {
     agentFeedback: true,
   },
+  // Reown AppKit / WalletConnect peer deps that break Next bundling
+  serverExternalPackages: ["pino", "pino-pretty", "lokijs", "encoding"],
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {

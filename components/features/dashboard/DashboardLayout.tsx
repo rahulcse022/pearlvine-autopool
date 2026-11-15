@@ -7,7 +7,15 @@ import { formatAddress } from "@/utils/formatAddress";
 import { getBscAddressUrl } from "@/utils/explorer";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
-  const { user, userPane, setUserPane, disconnectWallet, contractAddress } = usePearlvine();
+  const {
+    user,
+    userPane,
+    setUserPane,
+    setActiveTab,
+    disconnectWallet,
+    contractAddress,
+    isAdmin,
+  } = usePearlvine();
 
   return (
     <div className="flex min-h-[calc(100vh-4rem)] bg-pearlSurface">
@@ -51,6 +59,16 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               </button>
             );
           })}
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setActiveTab("admin")}
+              className="w-full text-left flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition light-drawer-item"
+            >
+              <i className="fa-solid fa-shield-halved text-violet-600 w-5"></i>
+              <span className="truncate">Admin</span>
+            </button>
+          )}
         </div>
 
         <div className="pt-4 border-t border-slate-200 mt-4 space-y-2">

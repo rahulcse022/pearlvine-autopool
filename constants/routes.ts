@@ -5,6 +5,7 @@ export const APP_PATHS = {
   login: "/login",
   register: "/register",
   dashboard: "/dashboard",
+  admin: "/admin",
 } as const satisfies Record<TabType, string>;
 
 export function tabToPath(tab: TabType): string {

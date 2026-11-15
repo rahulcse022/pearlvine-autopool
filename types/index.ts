@@ -1,4 +1,4 @@
-export type TabType = "home" | "login" | "register" | "dashboard";
+export type TabType = "home" | "login" | "register" | "dashboard" | "admin";
 
 export type UserPaneType = "main" | "autopool" | "referrals" | "level";
 

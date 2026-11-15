@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { PearlvineProvider } from "@/context/PearlvineContext";
+import ClientProviders from "@/components/providers/ClientProviders";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import Modal from "@/components/common/Modal";
@@ -73,7 +73,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
       </head>
       <body className="bg-slate-100 text-slate-800 antialiased min-h-screen flex flex-col font-sans">
-        <PearlvineProvider>
+        <ClientProviders>
           <div className="min-h-screen flex flex-col justify-between">
             <Navbar />
             <main className="flex-grow">{children}</main>
@@ -82,7 +82,7 @@ export default function RootLayout({
           <InstallBanner />
           <Modal />
           <PwaRegister />
-        </PearlvineProvider>
+        </ClientProviders>
       </body>
     </html>
   );

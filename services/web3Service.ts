@@ -49,23 +49,32 @@ function formatJoinedAt(joinedAt: bigint | number | string | undefined): string 
   return new Date(seconds * 1000).toISOString().slice(0, 10);
 }
 
-export interface EthereumProvider {
-  request: (args: {
-    method: string;
-    params?: unknown[] | Record<string, unknown>;
-  }) => Promise<unknown>;
-  send?: (method: string, params?: unknown[]) => Promise<unknown>;
+/** Minimal EIP-1193 surface used for wallet_switch / BrowserProvider. */
+export type EthereumProvider = ethers.Eip1193Provider & {
   on?: (eventName: string, handler: (...args: unknown[]) => void) => void;
   removeListener?: (eventName: string, handler: (...args: unknown[]) => void) => void;
-}
-
-declare global {
-  interface Window {
-    ethereum?: EthereumProvider;
-  }
-}
+};
 
 const BSC_NETWORK = ethers.Network.from(CONTRACT_CONSTANTS.BSC_MAINNET.chainId);
+
+/** Active EIP-1193 provider from Reown AppKit (Bitget / MM / Trust / SafePal / WC). */
+let activeWalletProvider: EthereumProvider | null = null;
+
+export function setActiveWalletProvider(provider: EthereumProvider | null): void {
+  activeWalletProvider = provider;
+}
+
+export function getActiveWalletProvider(): EthereumProvider | null {
+  return activeWalletProvider;
+}
+
+function resolveEip1193Provider(): EthereumProvider | null {
+  if (activeWalletProvider) return activeWalletProvider;
+  if (typeof window !== "undefined" && window.ethereum) {
+    return window.ethereum as unknown as EthereumProvider;
+  }
+  return null;
+}
 
 function createRpcProvider(rpcUrl: string): ethers.JsonRpcProvider {
   return new ethers.JsonRpcProvider(rpcUrl, BSC_NETWORK, {
@@ -73,7 +82,7 @@ function createRpcProvider(rpcUrl: string): ethers.JsonRpcProvider {
   });
 }
 
-/** Public RPC reader with fallbacks (used when wallet is not available). */
+/** Public RPC reader with fallbacks — use for all contract reads (avoids broken injected RPCs). */
 export function getReadProvider(): ethers.AbstractProvider {
   // Widen away from `as const` tuple length so runtime length checks type-check.
   const urls: readonly string[] = CONTRACT_CONSTANTS.BSC_MAINNET.rpcUrls;
@@ -94,37 +103,72 @@ export function getReadProvider(): ethers.AbstractProvider {
 }
 
 export function getBrowserProvider(): ethers.BrowserProvider | null {
-  if (typeof window !== "undefined" && window.ethereum) {
-    return new ethers.BrowserProvider(window.ethereum as ethers.Eip1193Provider);
-  }
-  return null;
+  const eip1193 = resolveEip1193Provider();
+  if (!eip1193) return null;
+  return new ethers.BrowserProvider(eip1193);
 }
 
 /**
- * Prefer MetaMask/browser provider so balances match the wallet UI.
- * Falls back to public RPCs when wallet is not connected.
+ * Wallet provider when connected (for balance accuracy); otherwise public RPC.
+ * Prefer getReadProvider() for pure contract reads so Bitget/injected RPCs cannot break them.
  */
 export function getPreferredProvider(): ethers.ContractRunner {
   return getBrowserProvider() ?? getReadProvider();
 }
 
+/** Read current wallet chain id (decimal), or null if unavailable. */
+export async function getWalletChainId(): Promise<number | null> {
+  const eip1193 = resolveEip1193Provider();
+  if (!eip1193) return null;
+  try {
+    const hex = await eip1193.request({ method: "eth_chainId" });
+    if (typeof hex !== "string") return null;
+    return Number.parseInt(hex, 16);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Ensure the connected wallet is on BSC Mainnet (56).
+ * No-ops if already on BSC. Adds the chain when the wallet does not have it.
+ */
 export async function switchToBscMainnet(): Promise<boolean> {
-  if (typeof window === "undefined" || !window.ethereum) {
-    throw new Error("No Web3 wallet found. Please install MetaMask.");
+  const eip1193 = resolveEip1193Provider();
+  if (!eip1193) {
+    throw new Error("No Web3 wallet found. Connect Bitget, MetaMask, Trust, or SafePal.");
   }
 
   const network = CONTRACT_CONSTANTS.BSC_MAINNET;
+  const targetHex = network.chainIdHex.toLowerCase();
 
   try {
-    await window.ethereum.request({
+    const currentHex = await eip1193.request({ method: "eth_chainId" }).catch(() => null);
+    if (
+      typeof currentHex === "string" &&
+      currentHex.toLowerCase() === targetHex
+    ) {
+      return true;
+    }
+
+    await eip1193.request({
       method: "wallet_switchEthereumChain",
       params: [{ chainId: network.chainIdHex }],
     });
     return true;
   } catch (switchError: unknown) {
-    const err = switchError as { code?: number; data?: { originalError?: { code?: number } } };
+    const err = switchError as {
+      code?: number;
+      message?: string;
+      data?: { originalError?: { code?: number } };
+    };
+    const msg = (err?.message || String(switchError)).toLowerCase();
+    if (msg.includes("user rejected") || msg.includes("denied") || err?.code === 4001) {
+      throw new Error("Please switch to BNB Smart Chain (BSC Mainnet) to continue.");
+    }
+
     if (err?.code === 4902 || err?.data?.originalError?.code === 4902) {
-      await window.ethereum.request({
+      await eip1193.request({
         method: "wallet_addEthereumChain",
         params: [
           {
@@ -202,7 +246,7 @@ async function resolvePvcTokenAddress(
 
 export async function fetchTokenConfiguration(): Promise<TokenConfig> {
   try {
-    const contract = getReferralContract(getPreferredProvider());
+    const contract = getReferralContract(getReadProvider());
     const config = await contract.getTokenConfiguration();
     return {
       joinAmount: toPvc(config.joinAmount),
@@ -241,7 +285,7 @@ function mapMember(raw: MemberDetailsRaw) {
 
 export async function fetchDirectReferrals(sponsorAddress: string): Promise<ReferralItem[]> {
   try {
-    const contract = getReferralContract(getPreferredProvider());
+    const contract = getReferralContract(getReadProvider());
     const sponsor = ethers.getAddress(sponsorAddress);
     const rows = (await contract.getDirectReferrals(sponsor, 0, PAGE_LIMIT)) as MemberDetailsRaw[];
     return rows.map(mapMember).reverse();
@@ -279,7 +323,7 @@ export async function fetchUserPublicProfile(address: string): Promise<{
   if (!ethers.isAddress(address)) return null;
 
   const clean = ethers.getAddress(address);
-  const contract = getReferralContract(getPreferredProvider());
+  const contract = getReferralContract(getReadProvider());
   const [profile, hasJoined] = await Promise.all([
     fetchMemberProfile(contract, clean),
     contract.hasJoined(clean).catch(() => false),
@@ -298,7 +342,7 @@ export async function enrichUplineSlots(
   addresses: string[],
   levelReward: number
 ): Promise<UplineSlot[]> {
-  const contract = getReferralContract(getPreferredProvider());
+  const contract = getReferralContract(getReadProvider());
   return Promise.all(
     Array.from({ length: CONTRACT_CONSTANTS.MAX_LEVELS }, async (_, index) => {
       const raw = addresses[index];
@@ -333,7 +377,7 @@ export async function fetchLevelBoard(userAddress: string): Promise<{
   levelStats: LevelStat[];
   levelRewards: LevelRewardItem[];
 }> {
-  const contract = getReferralContract(getPreferredProvider());
+  const contract = getReferralContract(getReadProvider());
   const user = ethers.getAddress(userAddress);
   const emptyStats: LevelStat[] = Array.from(
     { length: CONTRACT_CONSTANTS.MAX_LEVELS },
@@ -391,11 +435,14 @@ export async function fetchLevelBoard(userAddress: string): Promise<{
 }
 
 export async function fetchLiveBlockchainState(userAddress: string) {
-  const provider = getPreferredProvider();
+  // Public RPC for contract reads — injected wallets (e.g. Bitget) often break eth_call.
+  const readProvider = getReadProvider();
+  // Wallet provider when available so PVC balance matches the connected wallet UI.
+  const tokenRunner = getBrowserProvider() ?? readProvider;
   const cleanAddress = ethers.getAddress(userAddress);
-  const referralContract = getReferralContract(provider);
-  const pvcTokenAddress = await resolvePvcTokenAddress(provider);
-  const tokenContract = getTokenContract(provider, pvcTokenAddress);
+  const referralContract = getReferralContract(readProvider);
+  const pvcTokenAddress = await resolvePvcTokenAddress(readProvider);
+  const tokenContract = getTokenContract(tokenRunner, pvcTokenAddress);
 
   const [
     balanceRaw,
@@ -543,6 +590,59 @@ export async function fetchLiveBlockchainState(userAddress: string) {
     tokenConfig,
     referrals,
   };
+}
+
+export async function fetchContractOwner(): Promise<string | null> {
+  try {
+    const contract = getReferralContract(getReadProvider());
+    const owner = await contract.owner();
+    if (!owner || owner === ethers.ZeroAddress) return null;
+    return ethers.getAddress(owner);
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchAdminPanelState(): Promise<{
+  owner: string;
+  partner1: string;
+  partner2: string;
+  adminReserve: number;
+} | null> {
+  try {
+    const contract = getReferralContract(getReadProvider());
+    const [ownerRaw, partner1Raw, partner2Raw, reserveRaw] = await Promise.all([
+      contract.owner(),
+      contract.partner1(),
+      contract.partner2(),
+      contract.adminReserve(),
+    ]);
+
+    return {
+      owner: ethers.getAddress(ownerRaw),
+      partner1: ethers.getAddress(partner1Raw),
+      partner2: ethers.getAddress(partner2Raw),
+      adminReserve: toPvc(reserveRaw),
+    };
+  } catch (err) {
+    console.warn("Failed to load admin panel state:", err);
+    return null;
+  }
+}
+
+export async function executeWithdrawPvcToPartners(
+  signer: ethers.Signer,
+  amountPVC: number
+): Promise<string> {
+  if (!(amountPVC > 0)) {
+    throw new Error("Amount must be greater than 0.");
+  }
+
+  const amountWei = ethers.parseUnits(amountPVC.toString(), DECIMALS);
+  const referralContract = getReferralContract(signer);
+  const tx = await referralContract.withdrawPvcToPartners(amountWei);
+  const receipt = await tx.wait(1);
+  return receipt.hash;
 }
 
 export async function executeApprovePvcToken(
