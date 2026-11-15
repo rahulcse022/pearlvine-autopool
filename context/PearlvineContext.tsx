@@ -90,6 +90,9 @@ const EMPTY_AUTO_POOL: AutoPoolStatus = {
   remaining: DEFAULT_TOKEN_CONFIG.autoPoolTarget,
   completed: false,
   currentRecipient: "",
+  currentRecipientName: "",
+  currentRecipientEarned: 0,
+  currentRecipientTarget: DEFAULT_TOKEN_CONFIG.autoPoolTarget,
   queueLength: 0,
 };
 
@@ -213,6 +216,7 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
         allowance: data.allowance,
         isPoolJoined: data.hasJoined,
         referrerAddress: data.referrerAddress,
+        referrerName: data.referrerName || "",
         isRoot: data.isRoot,
         isWeb3Connected: true,
         earnings: {

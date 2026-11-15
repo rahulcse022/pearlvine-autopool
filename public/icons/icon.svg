@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Pearlvine">
+  <rect width="512" height="512" rx="96" fill="#0f172a"/>
+  <circle cx="256" cy="220" r="110" fill="#06b6d4"/>
+  <circle cx="256" cy="220" r="70" fill="#1e3a8a"/>
+  <path d="M140 360c36-48 92-72 116-72s80 24 116 72c8 10 4 28-10 28H150c-14 0-18-18-10-28z" fill="#2563eb"/>
+</svg>

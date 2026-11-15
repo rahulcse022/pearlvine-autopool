@@ -90,30 +90,30 @@ export default function Navbar() {
         aria-hidden={!drawerOpen}
       />
 
-      {/* Side drawer */}
+      {/* Side drawer — light theme (header stays dark) */}
       <aside
-        className={`fixed top-0 right-0 z-[70] h-full w-[min(20rem,85vw)] bg-[#0f172a] text-slate-200 border-l border-slate-800 shadow-2xl transition-transform duration-300 ease-out flex flex-col ${
+        className={`light-drawer fixed top-0 right-0 z-[70] flex h-full w-[min(20rem,85vw)] flex-col border-l border-slate-200 bg-white shadow-2xl transition-transform duration-300 ease-out ${
           drawerOpen ? "translate-x-0" : "translate-x-full"
         }`}
         aria-hidden={!drawerOpen}
       >
-        <div className="h-16 px-4 flex items-center justify-between border-b border-slate-800 shrink-0">
+        <div className="h-16 px-4 flex items-center justify-between border-b border-slate-200 shrink-0 bg-slate-50">
           <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
+            <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">
               Menu
             </p>
             {isWeb3Connected ? (
-              <p className="text-xs font-mono text-cyan-400 truncate">
+              <p className="text-xs font-mono text-blue-600 truncate">
                 {formatAddress(user.walletAddress)}
               </p>
             ) : (
-              <p className="text-sm font-bold text-white">Pearlvine</p>
+              <p className="text-sm font-bold text-slate-900">Pearlvine</p>
             )}
           </div>
           <button
             type="button"
             aria-label="Close menu"
-            className="text-slate-300 hover:text-white text-xl p-2"
+            className="text-slate-500 hover:text-slate-800 text-xl p-2"
             onClick={closeDrawer}
           >
             <i className="fa-solid fa-xmark"></i>
@@ -131,11 +131,13 @@ export default function Navbar() {
                     type="button"
                     onClick={() => openDashboardPane(item.pane)}
                     className={`w-full text-left flex items-center space-x-3 py-3 px-3 rounded-xl text-sm font-semibold transition ${
-                      isActive ? "bg-blue-600 text-white" : "text-slate-200 hover:bg-slate-800"
+                      isActive
+                        ? "light-drawer-item-active"
+                        : "light-drawer-item"
                     }`}
                   >
                     <i
-                      className={`fa-solid ${item.icon} ${isActive ? "text-white" : item.color} w-5`}
+                      className={`fa-solid ${item.icon} ${isActive ? "text-blue-600" : item.color} w-5`}
                     ></i>
                     <span>{item.label}</span>
                   </button>
@@ -157,11 +159,11 @@ export default function Navbar() {
         </nav>
 
         {isWeb3Connected && (
-          <div className="p-4 border-t border-slate-800 shrink-0">
+          <div className="p-4 border-t border-slate-200 shrink-0 bg-slate-50">
             <button
               type="button"
               onClick={handleLogout}
-              className="w-full text-left flex items-center space-x-3 py-3 px-3 rounded-xl text-sm font-semibold text-red-300 hover:bg-red-950/40 transition"
+              className="w-full text-left flex items-center space-x-3 py-3 px-3 rounded-xl text-sm font-semibold text-red-600 hover:bg-red-50 transition"
             >
               <i className="fa-solid fa-right-from-bracket w-5"></i>
               <span>Logout</span>
@@ -191,10 +193,10 @@ function DrawerLink({
       className={`w-full text-left flex items-center space-x-3 py-3 px-3 rounded-xl text-sm font-semibold transition ${
         primary
           ? "bg-blue-600 text-white hover:bg-blue-500"
-          : "text-slate-200 hover:bg-slate-800"
+          : "light-drawer-item"
       }`}
     >
-      <i className={`fa-solid ${icon} w-5`}></i>
+      <i className={`fa-solid ${icon} w-5 ${primary ? "" : "text-blue-600"}`}></i>
       <span>{label}</span>
     </button>
   );

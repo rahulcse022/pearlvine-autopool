@@ -65,6 +65,9 @@ export interface AutoPoolStatus {
   remaining: number;
   completed: boolean;
   currentRecipient: string;
+  currentRecipientName: string;
+  currentRecipientEarned: number;
+  currentRecipientTarget: number;
   queueLength: number;
 }
 
@@ -72,6 +75,7 @@ export interface UserProfile {
   name: string;
   walletAddress: string;
   referrerAddress: string;
+  referrerName: string;
   email: string;
   mobile: string;
   pvcBalance: number;

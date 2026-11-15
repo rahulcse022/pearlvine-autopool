@@ -220,7 +220,7 @@ Display the user's main information:
 
 - Connected Wallet Address
 - Sponsor Address
-- Total Joined Members
+- Total Crowd Members
 - Direct Referral Earnings
 - Level Referral Earnings
 - AutoPool Earnings

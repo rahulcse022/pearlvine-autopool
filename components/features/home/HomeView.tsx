@@ -32,45 +32,45 @@ export default function HomeView() {
 
   return (
     <section className="view-section">
-      <div className="relative bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900 text-white py-20 px-4 sm:px-6 lg:px-8 text-center overflow-hidden border-b border-slate-800">
-        <div className="absolute inset-0 opacity-15 bg-[radial-gradient(#38bdf8_1px,transparent_1px)] [background-size:24px_24px]"></div>
+      <div className="light-hero relative py-16 sm:py-20 px-4 sm:px-6 lg:px-8 text-center overflow-hidden border-b">
+        <div className="absolute inset-0 opacity-40 bg-[radial-gradient(#93c5fd_1px,transparent_1px)] [background-size:24px_24px]"></div>
         <div className="max-w-4xl mx-auto relative z-10 space-y-6">
           <a
             href={`https://testnet.bscscan.com/address/${contractAddress}`}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-2 bg-blue-500/10 hover:bg-blue-500/20 text-cyan-400 text-xs font-semibold px-4 py-1.5 rounded-full border border-cyan-500/30 backdrop-blur-sm transition"
+            className="inline-flex items-center gap-2 bg-white hover:bg-blue-50 text-blue-600 text-xs font-semibold px-4 py-1.5 rounded-full border border-blue-200 shadow-sm transition"
           >
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             <span>Contract: {formatAddress(contractAddress, 4)}</span>
             <i className="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
           </a>
 
-          <h1 className="text-4xl sm:text-6xl font-black tracking-tight leading-tight">
+          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-tight text-slate-900">
             PVC Global Auto Pool &amp;{" "}
-            <span className="bg-gradient-to-r from-cyan-400 via-blue-400 to-indigo-300 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-blue-600 via-cyan-600 to-indigo-600 bg-clip-text text-transparent">
               10-Level Referral Reward
             </span>
           </h1>
 
-          <p className="text-base sm:text-lg text-slate-300 max-w-2xl mx-auto leading-relaxed">
+          <p className="text-sm sm:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
             A fully automated, on-chain referral distribution system built with PVC tokens,
             providing direct referral rewards, 10-level uplines, admin reserve allocation and
             FIFO-based global AutoPool distribution.
           </p>
 
-          <div className="flex flex-wrap justify-center gap-4 pt-4">
+          <div className="flex flex-col sm:flex-row flex-wrap justify-center gap-3 sm:gap-4 pt-4">
             <button
               type="button"
               onClick={handleJoin}
-              className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-bold px-8 py-3.5 rounded-xl shadow-lg shadow-blue-900/40 transition transform hover:-translate-y-0.5"
+              className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-bold px-8 py-3.5 rounded-xl shadow-lg shadow-blue-200 transition transform hover:-translate-y-0.5"
             >
               Join Auto Pool
             </button>
             <button
               type="button"
               onClick={scrollToDistribution}
-              className="bg-slate-800/90 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold px-8 py-3.5 rounded-xl shadow transition"
+              className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-semibold px-8 py-3.5 rounded-xl shadow-sm transition"
             >
               View Contract Structure
             </button>
@@ -81,7 +81,7 @@ export default function HomeView() {
       <div
         ref={distributionRef}
         id="distribution"
-        className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16"
+        className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16"
       >
         <div className="text-center mb-8 space-y-2">
           <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">

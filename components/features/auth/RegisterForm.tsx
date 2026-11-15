@@ -4,6 +4,16 @@ import React, { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ethers } from "ethers";
 import { usePearlvine } from "@/context/PearlvineContext";
+import { fetchUserPublicProfile } from "@/services/web3Service";
+import { formatAddress } from "@/utils/formatAddress";
+
+interface SponsorProfile {
+  address: string;
+  name: string;
+  email: string;
+  mobile: string;
+  hasJoined: boolean;
+}
 
 export default function RegisterForm() {
   const {
@@ -23,6 +33,8 @@ export default function RegisterForm() {
   const [email, setEmail] = useState("");
   const [mobile, setMobile] = useState("");
   const [sponsor, setSponsor] = useState(rootAddress);
+  const [sponsorProfile, setSponsorProfile] = useState<SponsorProfile | null>(null);
+  const [sponsorLoading, setSponsorLoading] = useState(false);
 
   useEffect(() => {
     const ref = searchParams.get("ref")?.trim() ?? "";
@@ -30,6 +42,36 @@ export default function RegisterForm() {
       setSponsor(ethers.getAddress(ref));
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const trimmed = sponsor.trim();
+
+    if (!ethers.isAddress(trimmed)) {
+      setSponsorProfile(null);
+      setSponsorLoading(false);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setSponsorLoading(true);
+      void fetchUserPublicProfile(trimmed)
+        .then((profile) => {
+          if (!cancelled) setSponsorProfile(profile);
+        })
+        .catch(() => {
+          if (!cancelled) setSponsorProfile(null);
+        })
+        .finally(() => {
+          if (!cancelled) setSponsorLoading(false);
+        });
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [sponsor]);
 
   const busy = isSigning || isConnecting || isTransacting;
 
@@ -46,14 +88,14 @@ export default function RegisterForm() {
   return (
     <section className="py-12 px-4 sm:px-6 lg:px-8 bg-slate-50 min-h-[calc(100vh-14rem)] flex items-center justify-center">
       <div className="max-w-xl w-full bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
-        <div className="bg-[#0f172a] text-white p-6 sm:p-7 border-b border-slate-800 flex justify-between items-center gap-3">
+        <div className="bg-gradient-to-br from-blue-50 via-white to-cyan-50 text-slate-900 p-6 sm:p-7 border-b border-slate-200 flex justify-between items-center gap-3">
           <div>
             <h2 className="text-2xl font-black">Register &amp; Join</h2>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-500 mt-0.5">
               Pay {tokenConfig.joinAmount} PVC on-chain to join
             </p>
           </div>
-          <span className="text-xs bg-blue-600 px-3 py-1 rounded-full font-bold shrink-0">
+          <span className="text-xs bg-blue-600 text-white px-3 py-1 rounded-full font-bold shrink-0">
             {tokenConfig.joinAmount} PVC
           </span>
         </div>
@@ -128,6 +170,12 @@ export default function RegisterForm() {
               />
             </div>
 
+            <SponsorDetailsCard
+              loading={sponsorLoading}
+              profile={sponsorProfile}
+              rawSponsor={sponsor}
+            />
+
             {user.walletAddress && (
               <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs space-y-1">
                 <span className="text-slate-500 font-semibold uppercase tracking-wider">
@@ -141,17 +189,6 @@ export default function RegisterForm() {
                 </p>
               </div>
             )}
-
-            <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-900 space-y-1">
-              <p>
-                You will pay <strong>{tokenConfig.joinAmount} PVC</strong> to join via{" "}
-                <code className="font-mono">join()</code>.
-              </p>
-              <p>
-                Direct {tokenConfig.directReward} · Level {tokenConfig.levelShare} · AutoPool{" "}
-                {tokenConfig.autoPoolContribution} · Admin {tokenConfig.adminReward}
-              </p>
-            </div>
 
             <button
               type="submit"
@@ -194,5 +231,94 @@ export default function RegisterForm() {
         </div>
       </div>
     </section>
+  );
+}
+
+function SponsorDetailsCard({
+  loading,
+  profile,
+  rawSponsor,
+}: {
+  loading: boolean;
+  profile: SponsorProfile | null;
+  rawSponsor: string;
+}) {
+  if (!ethers.isAddress(rawSponsor.trim())) {
+    return (
+      <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+        Enter a valid sponsor wallet to preview details.
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500 flex items-center gap-2">
+        <i className="fa-solid fa-circle-notch fa-spin"></i>
+        Loading sponsor details...
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-xs text-red-700">
+        Could not load sponsor details.
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-slate-800 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-blue-700">
+          Sponsor Details
+        </p>
+        <span
+          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+            profile.hasJoined
+              ? "bg-emerald-100 text-emerald-700"
+              : "bg-amber-100 text-amber-700"
+          }`}
+        >
+          {profile.hasJoined ? "Joined" : "Not Joined"}
+        </span>
+      </div>
+      <div className="space-y-1.5">
+        <DetailLine label="Name" value={profile.name || "—"} />
+        <DetailLine label="Email" value={profile.email || "—"} />
+        <DetailLine label="Mobile" value={profile.mobile || "—"} />
+        <DetailLine
+          label="Wallet"
+          value={formatAddress(profile.address, 6)}
+          mono
+          title={profile.address}
+        />
+      </div>
+    </div>
+  );
+}
+
+function DetailLine({
+  label,
+  value,
+  mono = false,
+  title,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  title?: string;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <span className="text-slate-500 shrink-0">{label}</span>
+      <span
+        className={`font-semibold text-right truncate ${mono ? "font-mono text-blue-700" : "text-slate-900"}`}
+        title={title || value}
+      >
+        {value}
+      </span>
+    </div>
   );
 }

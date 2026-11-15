@@ -14,17 +14,17 @@ export default function LoginForm() {
   } = usePearlvine();
 
   return (
-    <section className="py-16 px-4 sm:px-6 lg:px-8 bg-slate-50 min-h-[calc(100vh-14rem)] flex items-center justify-center">
+    <section className="py-12 sm:py-16 px-4 sm:px-6 lg:px-8 bg-slate-50 min-h-[calc(100vh-14rem)] flex items-center justify-center">
       <div className="max-w-lg w-full bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
-        <div className="bg-[#0f172a] text-white p-6 sm:p-7 border-b border-slate-800">
+        <div className="bg-gradient-to-br from-blue-50 via-white to-cyan-50 text-slate-900 p-6 sm:p-7 border-b border-slate-200">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-black tracking-tight">Sign In</h2>
-              <p className="text-xs text-slate-400 mt-1">
+              <p className="text-xs text-slate-500 mt-1">
                 Only joined wallets can log in
               </p>
             </div>
-            <div className="w-12 h-12 bg-blue-600/20 border border-blue-500/30 rounded-2xl flex items-center justify-center text-cyan-400 text-xl">
+            <div className="w-12 h-12 bg-blue-100 border border-blue-200 rounded-2xl flex items-center justify-center text-blue-600 text-xl">
               <i className="fa-solid fa-signature"></i>
             </div>
           </div>

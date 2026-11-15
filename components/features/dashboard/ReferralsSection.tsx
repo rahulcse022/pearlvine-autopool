@@ -52,7 +52,10 @@ export default function ReferralsSection() {
           <span className="text-xs text-blue-700 font-semibold">Referral Link</span>
           <p className="text-xs font-mono font-bold text-blue-600 mt-1 break-all">{refLink}</p>
           <p className="text-[11px] text-slate-500 mt-1">
-            Sponsor: {formatAddress(user.referrerAddress)}
+            Sponsor:{" "}
+            {user.referrerName
+              ? `${user.referrerName} · ${formatAddress(user.referrerAddress)}`
+              : formatAddress(user.referrerAddress)}
           </p>
         </div>
         <button

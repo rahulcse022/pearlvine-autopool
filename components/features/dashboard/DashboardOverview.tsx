@@ -4,11 +4,13 @@ import { usePearlvine } from "@/context/PearlvineContext";
 import { formatAddress } from "@/utils/formatAddress";
 import { APP_PATHS } from "@/constants/routes";
 import MetricCard from "@/components/common/MetricCard";
+import CurrentAutoPoolRecipient from "@/components/common/CurrentAutoPoolRecipient";
 
 export default function DashboardOverview() {
   const {
     user,
     referrals,
+    levelStats,
     autoPool,
     totalJoined,
     showModal,
@@ -21,6 +23,8 @@ export default function DashboardOverview() {
   };
   const totalWithdraw =
     earnings.directEarnings + earnings.levelEarnings + earnings.autoPoolEarnings;
+  const totalDirect = referrals.length;
+  const totalLevel = levelStats.reduce((sum, stat) => sum + (stat.joinings || 0), 0);
 
   const progressPct =
     autoPool.target > 0
@@ -50,18 +54,18 @@ export default function DashboardOverview() {
 
   return (
     <div className="space-y-5">
-      <section className="overflow-hidden rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 text-white shadow-md">
-        <div className="p-5 sm:p-6">
-          <div className="flex items-start justify-between gap-3 pb-5 border-b border-white/10">
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-blue-50/60 to-cyan-50 shadow-sm">
+        <div className="p-4 sm:p-5">
+          <div className="flex items-start justify-between gap-3 pb-4 border-b border-slate-200">
             <div className="min-w-0 flex items-center gap-3">
-              <div className="h-11 w-11 shrink-0 rounded-full bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center text-sm font-black text-white">
+              <div className="h-11 w-11 shrink-0 rounded-full bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center text-sm font-black text-white">
                 {(user.name || "M").charAt(0).toUpperCase()}
               </div>
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-cyan-400/90">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-blue-600">
                   Member Profile
                 </p>
-                <h2 className="mt-0.5 text-xl sm:text-2xl font-black tracking-tight truncate">
+                <h2 className="mt-0.5 text-xl font-black tracking-tight truncate text-slate-900">
                   {user.name || "Member"}
                 </h2>
               </div>
@@ -69,20 +73,20 @@ export default function DashboardOverview() {
             <span
               className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold border ${
                 user.isPoolJoined
-                  ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
-                  : "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : "bg-amber-50 text-amber-700 border-amber-200"
               }`}
             >
               <span
                 className={`h-1.5 w-1.5 rounded-full ${
-                  user.isPoolJoined ? "bg-emerald-400" : "bg-amber-400"
+                  user.isPoolJoined ? "bg-emerald-500" : "bg-amber-500"
                 }`}
               />
               {user.isPoolJoined ? "Joined" : "Not Joined"}
             </span>
           </div>
 
-          <div className="divide-y divide-white/10">
+          <div className="divide-y divide-slate-100">
             <DetailRow label="Email" value={user.email || "—"} />
             <DetailRow label="Mobile" value={user.mobile || "—"} />
             <DetailRow
@@ -99,8 +103,17 @@ export default function DashboardOverview() {
             />
             <DetailRow
               label="Sponsor"
-              value={formatAddress(user.referrerAddress, 6) || "—"}
-              mono
+              value={
+                user.referrerName ||
+                formatAddress(user.referrerAddress, 6) ||
+                "—"
+              }
+              subValue={
+                user.referrerName && user.referrerAddress
+                  ? formatAddress(user.referrerAddress, 6)
+                  : undefined
+              }
+              mono={!user.referrerName}
               fullValue={user.referrerAddress}
               onCopy={() => copyAddress(user.referrerAddress, "Sponsor")}
               explorerUrl={
@@ -140,7 +153,7 @@ export default function DashboardOverview() {
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
         <MetricCard
           label="Total Withdraw"
           value={`${totalWithdraw} PVC`}
@@ -148,16 +161,37 @@ export default function DashboardOverview() {
           tone="cyan"
         />
         <MetricCard
-          label="Total Joined"
+          label="Total Crowd"
           value={String(totalJoined)}
           icon="fa-user-group"
           tone="emerald"
         />
+        <MetricCard
+          label="Total Direct"
+          value={String(totalDirect)}
+          icon="fa-users"
+          tone="blue"
+        />
+        <MetricCard
+          label="Total Level"
+          value={String(totalLevel)}
+          icon="fa-layer-group"
+          tone="amber"
+        />
       </div>
+
+      <CurrentAutoPoolRecipient
+        name={autoPool.currentRecipientName}
+        address={autoPool.currentRecipient}
+        earned={autoPool.currentRecipientEarned}
+        target={autoPool.currentRecipientTarget}
+        queueLength={autoPool.queueLength}
+        compact
+      />
 
       <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="font-bold text-slate-800 text-sm">AutoPool Progress</h3>
+          <h3 className="font-bold text-slate-800 text-sm">Your AutoPool Progress</h3>
           <span className="text-xs font-semibold text-slate-500">
             {autoPool.completed ? "Completed" : "In Progress"}
           </span>
@@ -208,6 +242,7 @@ export default function DashboardOverview() {
 function DetailRow({
   label,
   value,
+  subValue,
   mono = false,
   fullValue,
   onCopy,
@@ -215,6 +250,7 @@ function DetailRow({
 }: {
   label: string;
   value: string;
+  subValue?: string;
   mono?: boolean;
   fullValue?: string;
   onCopy?: () => void;
@@ -223,15 +259,23 @@ function DetailRow({
   return (
     <div className="flex items-center justify-between gap-3 py-3.5">
       <div className="min-w-0">
-        <p className="text-[11px] text-slate-400 font-medium">{label}</p>
+        <p className="text-[11px] font-medium text-slate-500">{label}</p>
         <p
-          className={`mt-0.5 text-sm font-semibold text-white truncate ${
-            mono ? "font-mono text-cyan-300" : ""
+          className={`mt-0.5 text-sm font-semibold text-slate-900 truncate ${
+            mono ? "font-mono text-blue-600" : ""
           }`}
           title={fullValue || value}
         >
           {value}
         </p>
+        {subValue && (
+          <p
+            className="mt-0.5 text-xs font-mono text-blue-600/90 truncate"
+            title={fullValue || subValue}
+          >
+            {subValue}
+          </p>
+        )}
       </div>
       {(onCopy || explorerUrl) && (
         <div className="flex shrink-0 items-center gap-1.5">
@@ -241,7 +285,7 @@ function DetailRow({
               onClick={onCopy}
               disabled={!fullValue}
               title={`Copy ${label.toLowerCase()}`}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-300 transition hover:bg-white/10 hover:text-white disabled:opacity-40"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 disabled:opacity-40"
             >
               <i className="fa-solid fa-copy text-[11px]"></i>
             </button>
@@ -252,7 +296,7 @@ function DetailRow({
               target="_blank"
               rel="noreferrer"
               title="View on BscScan Testnet"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-300 transition hover:bg-white/10 hover:text-white"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
             >
               <i className="fa-solid fa-arrow-up-right-from-square text-[11px]"></i>
             </a>

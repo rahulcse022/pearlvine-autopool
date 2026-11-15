@@ -5,13 +5,72 @@
   --color-pearlBlue: #1e3a8a;
   --color-pearlAccent: #2563eb;
   --color-pearlCyan: #06b6d4;
+  --color-pearlSurface: #f8fafc;
   --color-cardBlue: #3b82f6;
   --color-cardGreen: #10b981;
   --color-cardOrange: #f59e0b;
   --color-cardRed: #ef4444;
 }
 
-/* Custom scrollbar */
+/* Reusable light surfaces (header stays dark) */
+@layer components {
+  .light-drawer {
+    background-color: #ffffff !important;
+    color: #334155;
+    border-color: #e2e8f0;
+  }
+
+  .light-drawer-item {
+    color: #334155;
+  }
+
+  .light-drawer-item:hover {
+    background-color: #f1f5f9;
+  }
+
+  .light-drawer-item-active {
+    background-color: #eff6ff;
+    color: #1d4ed8;
+  }
+
+  .light-hero {
+    background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 45%, #ecfeff 100%);
+    color: #0f172a;
+    border-color: #e2e8f0;
+  }
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* Soft mobile-app feel without changing layout chrome */
+@media (max-width: 768px) {
+  body {
+    touch-action: manipulation;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+@media (display-mode: standalone) {
+  body {
+    min-height: 100dvh;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;

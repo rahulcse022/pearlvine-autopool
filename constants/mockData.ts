@@ -29,6 +29,7 @@ export const INITIAL_USER: UserProfile = {
   name: "",
   walletAddress: "",
   referrerAddress: CONTRACT_CONSTANTS.ROOT_ADDRESS,
+  referrerName: "",
   email: "",
   mobile: "",
   pvcBalance: 0,

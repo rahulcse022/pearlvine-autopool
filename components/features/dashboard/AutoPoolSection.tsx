@@ -1,8 +1,8 @@
 "use client";
 
 import { usePearlvine } from "@/context/PearlvineContext";
-import { formatAddress } from "@/utils/formatAddress";
 import MetricCard from "@/components/common/MetricCard";
+import CurrentAutoPoolRecipient from "@/components/common/CurrentAutoPoolRecipient";
 
 export default function AutoPoolSection() {
   const { user, autoPool, tokenConfig } = usePearlvine();
@@ -33,6 +33,14 @@ export default function AutoPoolSection() {
         </span>
       </div>
 
+      <CurrentAutoPoolRecipient
+        name={autoPool.currentRecipientName}
+        address={autoPool.currentRecipient}
+        earned={autoPool.currentRecipientEarned}
+        target={autoPool.currentRecipientTarget}
+        queueLength={autoPool.queueLength}
+      />
+
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-2.5">
         <MetricCard
           label="Your Earnings"
@@ -41,20 +49,16 @@ export default function AutoPoolSection() {
           tone="blue"
         />
         <MetricCard
-          label="Earned / Target"
+          label="Your Progress"
           value={`${autoPool.earned} / ${autoPool.target}`}
           hint={`${autoPool.remaining} PVC left`}
           icon="fa-bullseye"
           tone="cyan"
         />
         <MetricCard
-          label="Queue"
+          label="Queue Length"
           value={String(autoPool.queueLength)}
-          hint={
-            autoPool.currentRecipient
-              ? `Now: ${formatAddress(autoPool.currentRecipient)}`
-              : "No recipient"
-          }
+          hint="Members waiting"
           icon="fa-list-ol"
           tone="slate"
         />
@@ -62,7 +66,7 @@ export default function AutoPoolSection() {
 
       <div className="bg-white p-4 rounded-2xl border border-blue-100 shadow-sm space-y-2">
         <div className="flex justify-between text-xs text-slate-600">
-          <span className="font-semibold">Progress</span>
+          <span className="font-semibold">Your Progress</span>
           <span className="font-bold text-blue-700">{progressPct}%</span>
         </div>
         <div className="h-3 rounded-full bg-blue-50 overflow-hidden">

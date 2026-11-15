@@ -225,6 +225,31 @@ async function fetchMemberProfile(
   }
 }
 
+export async function fetchUserPublicProfile(address: string): Promise<{
+  address: string;
+  name: string;
+  email: string;
+  mobile: string;
+  hasJoined: boolean;
+} | null> {
+  if (!ethers.isAddress(address)) return null;
+
+  const clean = ethers.getAddress(address);
+  const contract = getReferralContract(getReadProvider());
+  const [profile, hasJoined] = await Promise.all([
+    fetchMemberProfile(contract, clean),
+    contract.hasJoined(clean).catch(() => false),
+  ]);
+
+  return {
+    address: clean,
+    name: profile.name,
+    email: profile.email,
+    mobile: profile.mobile,
+    hasJoined: Boolean(hasJoined),
+  };
+}
+
 export async function enrichUplineSlots(
   addresses: string[],
   levelReward: number
@@ -382,42 +407,81 @@ export async function fetchLiveBlockchainState(userAddress: string) {
 
   const earned = toPvc(autoPoolStatusRaw[0]);
   const target = toPvc(autoPoolStatusRaw[1]) || tokenConfig.autoPoolTarget;
+  const currentRecipientAddress =
+    !currentRecipient || currentRecipient === ethers.ZeroAddress
+      ? ""
+      : ethers.getAddress(currentRecipient);
+
+  const referrerAddress = resolveSponsorAddress(
+    userInfo.sponsor && userInfo.sponsor !== ethers.ZeroAddress
+      ? userInfo.sponsor
+      : referrerOfRaw
+  );
+
+  const emptyUserInfo = {
+    fullName: "",
+    email: "",
+    mobile: "",
+    sponsor: ethers.ZeroAddress,
+    joined: false,
+    joinedAt: BigInt(0),
+  };
+
+  const [uplines, referrals, levelBoard, sponsorInfo, recipientInfo, recipientStatusRaw] =
+    await Promise.all([
+      enrichUplineSlots(uplinesRaw as string[], tokenConfig.levelReward),
+      hasJoined ? fetchDirectReferrals(cleanAddress) : Promise.resolve([]),
+      hasJoined
+        ? fetchLevelBoard(cleanAddress)
+        : Promise.resolve({
+            levelStats: Array.from({ length: CONTRACT_CONSTANTS.MAX_LEVELS }, (_, i) => ({
+              level: i + 1,
+              income: 0,
+              joinings: 0,
+            })),
+            levelRewards: [],
+          }),
+      referralContract.userInfo(referrerAddress).catch(() => emptyUserInfo),
+      currentRecipientAddress
+        ? referralContract.userInfo(currentRecipientAddress).catch(() => emptyUserInfo)
+        : Promise.resolve(emptyUserInfo),
+      currentRecipientAddress
+        ? referralContract
+            .getAutoPoolStatus(currentRecipientAddress)
+            .catch(() => [
+              BigInt(0),
+              ethers.parseUnits(String(tokenConfig.autoPoolTarget), DECIMALS),
+              false,
+            ])
+        : Promise.resolve([
+            BigInt(0),
+            ethers.parseUnits(String(tokenConfig.autoPoolTarget), DECIMALS),
+            false,
+          ]),
+    ]);
+
+  const currentRecipientEarned = toPvc(recipientStatusRaw[0]);
+  const currentRecipientTarget =
+    toPvc(recipientStatusRaw[1]) || tokenConfig.autoPoolTarget;
+
   const autoPool: AutoPoolStatus = {
     earned,
     target,
     remaining: Math.max(0, target - earned),
     completed: Boolean(autoPoolStatusRaw[2]),
-    currentRecipient:
-      !currentRecipient || currentRecipient === ethers.ZeroAddress
-        ? ""
-        : ethers.getAddress(currentRecipient),
+    currentRecipient: currentRecipientAddress,
+    currentRecipientName: recipientInfo.fullName || "",
+    currentRecipientEarned,
+    currentRecipientTarget,
     queueLength: Number(queueLength),
   };
-
-  const [uplines, referrals, levelBoard] = await Promise.all([
-    enrichUplineSlots(uplinesRaw as string[], tokenConfig.levelReward),
-    hasJoined ? fetchDirectReferrals(cleanAddress) : Promise.resolve([]),
-    hasJoined
-      ? fetchLevelBoard(cleanAddress)
-      : Promise.resolve({
-          levelStats: Array.from({ length: CONTRACT_CONSTANTS.MAX_LEVELS }, (_, i) => ({
-            level: i + 1,
-            income: 0,
-            joinings: 0,
-          })),
-          levelRewards: [],
-        }),
-  ]);
 
   return {
     pvcBalance: toPvc(balanceRaw),
     allowance: toPvc(allowanceRaw),
     hasJoined: Boolean(hasJoined),
-    referrerAddress: resolveSponsorAddress(
-      userInfo.sponsor && userInfo.sponsor !== ethers.ZeroAddress
-        ? userInfo.sponsor
-        : referrerOfRaw
-    ),
+    referrerAddress,
+    referrerName: sponsorInfo.fullName || "",
     isRoot: Boolean(isRoot),
     name: userInfo.fullName || "",
     email: userInfo.email || "",
