@@ -37,6 +37,11 @@ import {
   resolveSponsorAddress,
   fetchTokenConfiguration,
 } from "@/services/web3Service";
+import {
+  loadAuthSession,
+  saveAuthSession,
+  clearAuthSession,
+} from "@/utils/authSession";
 
 interface PearlvineContextType {
   activeTab: TabType;
@@ -117,6 +122,7 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
   const [tokenConfig, setTokenConfig] = useState<TokenConfig>(DEFAULT_TOKEN_CONFIG);
 
   const [isWeb3Connected, setIsWeb3Connected] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSigning, setIsSigning] = useState(false);
   const [isTransacting, setIsTransacting] = useState(false);
@@ -141,6 +147,7 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    if (!authReady) return;
     if (!isWeb3Connected && pathname === APP_PATHS.dashboard) {
       router.replace(APP_PATHS.login);
       return;
@@ -151,17 +158,7 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
     ) {
       router.replace(APP_PATHS.dashboard);
     }
-  }, [isWeb3Connected, pathname, router]);
-
-  useEffect(() => {
-    let mounted = true;
-    void fetchTokenConfiguration().then((config) => {
-      if (mounted) setTokenConfig(config);
-    });
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  }, [authReady, isWeb3Connected, pathname, router]);
 
   const setUserPane = (pane: UserPaneType) => {
     setUserPaneState(pane);
@@ -178,6 +175,20 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
   const closeModal = () => {
     setModal((prev) => ({ ...prev, isOpen: false }));
   };
+
+  const resetLocalAuthState = useCallback(() => {
+    clearAuthSession();
+    setIsWeb3Connected(false);
+    setSignature(undefined);
+    setUser(INITIAL_USER);
+    setReferrals([]);
+    setUplines(INITIAL_UPLINES);
+    setLevelRewards([]);
+    setLevelStats(EMPTY_LEVEL_STATS);
+    setAutoPool(EMPTY_AUTO_POOL);
+    setTotalJoined(0);
+    setUserPaneState("main");
+  }, []);
 
   const applyLiveState = useCallback(
     (
@@ -214,6 +225,100 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
     },
     []
   );
+
+  useEffect(() => {
+    let mounted = true;
+    void fetchTokenConfiguration().then((config) => {
+      if (mounted) setTokenConfig(config);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Restore session after refresh; logout only on manual logout or wallet change
+  useEffect(() => {
+    let mounted = true;
+
+    const restoreSession = async () => {
+      const session = loadAuthSession();
+      if (!session) {
+        if (mounted) setAuthReady(true);
+        return;
+      }
+
+      try {
+        const live = await fetchLiveBlockchainState(session.walletAddress);
+        if (!mounted) return;
+
+        if (!live.hasJoined) {
+          clearAuthSession();
+          setAuthReady(true);
+          return;
+        }
+
+        setSignature(session.signature);
+        applyLiveState(session.walletAddress, live, {
+          signature: session.signature,
+          isWeb3Connected: true,
+        });
+        setIsWeb3Connected(true);
+      } catch (err) {
+        console.warn("Failed to restore auth session:", err);
+        // Keep session on transient RPC errors so refresh does not force logout
+        if (!mounted) return;
+        setSignature(session.signature);
+        setUser((prev) => ({
+          ...prev,
+          walletAddress: session.walletAddress,
+          signature: session.signature,
+          isWeb3Connected: true,
+        }));
+        setIsWeb3Connected(true);
+      } finally {
+        if (mounted) setAuthReady(true);
+      }
+    };
+
+    void restoreSession();
+    return () => {
+      mounted = false;
+    };
+  }, [applyLiveState]);
+
+  // Auto-logout only when active MetaMask account changes away from session wallet
+  useEffect(() => {
+    if (!isWeb3Connected || !user.walletAddress) return;
+    const ethereum = window.ethereum;
+    if (!ethereum?.on) return;
+
+    const sessionWallet = user.walletAddress;
+
+    const onAccountsChanged = (accounts: unknown) => {
+      const list = Array.isArray(accounts) ? (accounts as string[]) : [];
+      const next = list[0];
+      if (!next) {
+        resetLocalAuthState();
+        router.replace(APP_PATHS.login);
+        return;
+      }
+
+      if (ethers.getAddress(next) !== ethers.getAddress(sessionWallet)) {
+        resetLocalAuthState();
+        showModal(
+          "Wallet Changed",
+          "Active wallet changed. Please sign in again with the new wallet.",
+          "warning"
+        );
+        router.replace(APP_PATHS.login);
+      }
+    };
+
+    ethereum.on("accountsChanged", onAccountsChanged);
+    return () => {
+      ethereum.removeListener?.("accountsChanged", onAccountsChanged);
+    };
+  }, [isWeb3Connected, user.walletAddress, router, resetLocalAuthState]);
 
   const syncBlockchainData = useCallback(
     async (targetAddress?: string) => {
@@ -272,16 +377,7 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
   };
 
   const disconnectWallet = () => {
-    setIsWeb3Connected(false);
-    setSignature(undefined);
-    setUser(INITIAL_USER);
-    setReferrals([]);
-    setUplines(INITIAL_UPLINES);
-    setLevelRewards([]);
-    setLevelStats(EMPTY_LEVEL_STATS);
-    setAutoPool(EMPTY_AUTO_POOL);
-    setTotalJoined(0);
-    setUserPaneState("main");
+    resetLocalAuthState();
     router.replace(APP_PATHS.home);
   };
 
@@ -328,6 +424,7 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
         signature: verifiedSig,
         isWeb3Connected: true,
       });
+      saveAuthSession(signerAddress, verifiedSig);
       setIsWeb3Connected(true);
       setUserPaneState("main");
       showModal("Signed In", "Welcome back.", "success");
@@ -449,6 +546,7 @@ export function PearlvineProvider({ children }: { children: ReactNode }) {
         isPoolJoined: true,
         earnings: afterJoin.earnings ?? EMPTY_EARNINGS,
       });
+      saveAuthSession(activeAddr, verifiedSig);
       setIsWeb3Connected(true);
       setUserPaneState("main");
       showModal("Joined", `Registered successfully with ${joinCost} PVC.`, "success");
